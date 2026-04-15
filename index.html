@@ -1,1644 +1,259 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="ToDoリスト" />
-  <title>ToDoリスト</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #F0F2F5; font-family: 'Noto Sans JP', sans-serif; }
-    #root { min-height: 100vh; }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel" data-presets="react">
-    const { useState, useEffect, useRef, useCallback } = React;
+// ============================================
+// ToDo アプリ GAS コード（全面書き直し版）
+// ============================================
+// 設定: 以下の3つを自分の値に置き換えてください
+var SPREADSHEET_ID = '1lIYGcsu_XWzweXHj82M4QM2pCoSLtSiFsBj5hLfzNkg';
+var LINE_TOKEN = 'JessPeHRBhbEDKt3GLAD6UQeG3QuV6QBQupkPIQKuQJM93vM9Z5d6X9QCtEUo3wJy2cJxoY7fjJxBbVBGwOnltL2QKdS4zJISJ68WLl2SSyz47x9XNieCYAqJHyf/2n7kP0+98HP3/d90nP0Jtg8OgdB04t89/1O/w1cDnyilFU=';
+var APP_URL = 'https://todo-app-tawny-iota-98.vercel.app';
 
-const TAB_COLORS = [
-  { value: "#3B82F6", light: "#DBEAFE", dark: "#1E3A5F" },
-  { value: "#6366F1", light: "#E0E7FF", dark: "#2E2B6B" },
-  { value: "#A855F7", light: "#F3E8FF", dark: "#3B1F6B" },
-  { value: "#EC4899", light: "#FCE7F3", dark: "#5B1A3B" },
-  { value: "#EF4444", light: "#FEE2E2", dark: "#5B1A1A" },
-  { value: "#F97316", light: "#FFEDD5", dark: "#5B2E0E" },
-  { value: "#EAB308", light: "#FEF9C3", dark: "#4B3B0A" },
-  { value: "#22C55E", light: "#DCFCE7", dark: "#1A3B2A" },
-  { value: "#14B8A6", light: "#CCFBF1", dark: "#1A3B35" },
-  { value: "#64748B", light: "#F1F5F9", dark: "#2A2F38" },
-];
+// シート名
+var SHEET_NOTIFICATIONS = 'notifications';
+var SHEET_USERS = 'users';
+var SHEET_SYNC = 'sync';
 
-const PRIORITIES = [
-  { key: "urgent", label: "緊急", icon: "🔥", color: "#DC2626", bg: "#FEE2E2", sort: 0 },
-  { key: "high", label: "高", icon: "🔴", color: "#EF4444", bg: "#FEF2F2", sort: 1 },
-  { key: "medium", label: "中", icon: "🟡", color: "#CA8A04", bg: "#FEFCE8", sort: 2 },
-  { key: "low", label: "低", icon: "🔵", color: "#3B82F6", bg: "#EFF6FF", sort: 3 },
-  { key: "none", label: "なし", icon: "−", color: "#9CA3AF", bg: "transparent", sort: 4 },
-];
+// ============================================
+// doGet: データ読込（load）用
+// アプリからGETリクエストで呼ばれる
+// ============================================
+function doGet(e) {
+  try {
+    var action = e.parameter.action;
+    var userId = e.parameter.userId;
 
-const REPEAT_PRESETS = [
-  { key: "none", label: "繰り返さない" },
-  { key: "daily", label: "毎日" },
-  { key: "weekly", label: "毎週" },
-  { key: "monthly", label: "毎月" },
-  { key: "weekdays", label: "平日（月〜金）" },
-  { key: "custom", label: "カスタム..." },
-];
+    if (action === 'load' && userId) {
+      return handleLoad(userId);
+    }
 
-const CUSTOM_UNITS = [
-  { key: "day", label: "日" },
-  { key: "week", label: "週" },
-  { key: "month", label: "月" },
-];
-
-const WEEKDAYS_JP = ["日", "月", "火", "水", "木", "金", "土"];
-
-const ORDINALS = [
-  { key: 1, label: "第1" },
-  { key: 2, label: "第2" },
-  { key: 3, label: "第3" },
-  { key: 4, label: "第4" },
-  { key: -1, label: "最終" },
-];
-
-const NOTIFY_OPTIONS = [
-  { key: "on_time", label: "ちょうど" },
-  { key: "5min", label: "5分前" },
-  { key: "10min", label: "10分前" },
-  { key: "15min", label: "15分前" },
-  { key: "30min", label: "30分前" },
-  { key: "1hour", label: "1時間前" },
-  { key: "1day", label: "1日前" },
-];
-
-const SORT_OPTIONS = [
-  { key: "created", label: "作成順" },
-  { key: "dueDate", label: "期限" },
-  { key: "priority", label: "優先度" },
-  { key: "progress", label: "進捗" },
-];
-
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyuJeIwclSTaxql64l54ZCvNkCm1h9wyF_JgJSDXD4jDszKYhToOW0PdGsj9GFRRL2atA/exec";
-
-function sendNotifyToGAS(task) {
-  if (!task.notify || !task.dueDate) return;
-  const NOTIFY_MINUTES = {
-    "on_time": 0, "5min": 5, "10min": 10, "15min": 15,
-    "30min": 30, "1hour": 60, "1day": 1440,
-  };
-  const mins = NOTIFY_MINUTES[task.notifyTiming] || 0;
-  const timeStr = task.dueTime || "09:00";
-  const notifyTime = new Date(task.dueDate + "T" + timeStr);
-  notifyTime.setMinutes(notifyTime.getMinutes() - mins);
-
-  const payload = JSON.stringify({
-    taskName: task.text,
-    notifyTime: notifyTime.toISOString(),
-    taskId: task.id || "",
-  });
-
-  fetch(GAS_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain" },
-    body: payload,
-  }).catch(() => {});
-}
-
-function cancelNotifyOnGAS(taskId) {
-  if (!taskId) return;
-  fetch(GAS_URL, {
-    method: "POST",
-    mode: "no-cors",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action: "cancel", taskId: taskId }),
-  }).catch(() => {});
-}
-const ACCENT = "#3B82F6";
-const ALL_TAB = "__all__";
-const COUNTDOWN_TAB = "__countdown__";
-const gid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-
-const emptyTask = {
-  text: "", memo: "", dueDate: "", dueTime: "", priority: "none",
-  notify: false, notifyTiming: "on_time", repeat: "none",
-  repeatDays: [], repeatMonthDay: 1, monthMode: "date",
-  monthOrdinal: 1, monthWeekday: 1, customInterval: 1,
-  customUnit: "day", progress: 0,
-};
-
-function getTabStyle(tab, darkMode) {
-  if (!tab || !tab.color) {
-    return { main: "#64748B", bg: darkMode ? "#2A2F38" : "#F1F5F9" };
+    return jsonResponse({ error: 'invalid request' });
+  } catch (err) {
+    return jsonResponse({ error: err.message });
   }
-  const found = TAB_COLORS.find(c => c.value === tab.color);
-  if (!found) return { main: tab.color, bg: darkMode ? "#2A2F38" : "#F1F5F9" };
-  return { main: found.value, bg: darkMode ? found.dark : found.light };
 }
 
-function daysUntil(dateStr) {
-  const target = new Date(dateStr + "T00:00:00");
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.ceil((target - now) / 86400000);
-}
+// ============================================
+// doPost: LINE Webhook + アプリからの書き込み
+// ============================================
+function doPost(e) {
+  try {
+    var body = JSON.parse(e.postData.contents);
 
-function getRepeatLabel(task) {
-  const r = task.repeat;
-  if (!r || r === "none") return null;
-  if (r === "daily") return "毎日";
-  if (r === "weekdays") return "平日";
-  if (r === "weekly") {
-    const d = (task.repeatDays || []).map(i => WEEKDAYS_JP[i]).join("・");
-    return d ? "毎週 " + d : "毎週";
-  }
-  if (r === "monthly") {
-    if (task.monthMode === "weekday") {
-      const ord = ORDINALS.find(o => o.key === task.monthOrdinal);
-      return "毎月" + (ord ? ord.label : "") + (WEEKDAYS_JP[task.monthWeekday] || "") + "曜";
-    }
-    return "毎月" + (task.repeatMonthDay || 1) + "日";
-  }
-  if (r === "custom") {
-    const iv = task.customInterval || 1;
-    const u = task.customUnit || "day";
-    if (u === "day") return iv + "日ごと";
-    if (u === "week") {
-      const d = (task.repeatDays || []).map(i => WEEKDAYS_JP[i]).join("・");
-      return d ? iv + "週ごと " + d : iv + "週ごと";
-    }
-    if (u === "month") {
-      if (task.monthMode === "weekday") {
-        const ord = ORDINALS.find(o => o.key === task.monthOrdinal);
-        return iv + "ヶ月ごと " + (ord ? ord.label : "") + (WEEKDAYS_JP[task.monthWeekday] || "") + "曜";
-      }
-      return iv + "ヶ月ごと " + (task.repeatMonthDay || 1) + "日";
-    }
-  }
-  return null;
-}
-
-// Default sort directions: created=desc(新しい順), priority=asc(高優先度順), dueDate=asc(近い順), progress=desc(高進捗順)
-const SORT_DEFAULTS = { priority: "asc", progress: "desc", dueDate: "asc", created: "desc" };
-
-function doSort(tasks, key, dir) {
-  const d = dir === "desc" ? -1 : 1;
-  return [...tasks].sort((a, b) => {
-    if (a.done !== b.done) return a.done ? 1 : -1;
-    if (key === "priority") {
-      const pa = (PRIORITIES.find(p => p.key === (a.priority || "none")) || {}).sort || 4;
-      const pb = (PRIORITIES.find(p => p.key === (b.priority || "none")) || {}).sort || 4;
-      return (pa - pb) * d;
-    }
-    if (key === "progress") return ((a.progress || 0) - (b.progress || 0)) * d;
-    if (key === "dueDate") {
-      if (a.dueDate && b.dueDate) return (new Date(a.dueDate) - new Date(b.dueDate)) * d;
-      if (a.dueDate) return -1;
-      if (b.dueDate) return 1;
-      return 0;
-    }
-    return ((a.createdAt || 0) - (b.createdAt || 0)) * d;
-  });
-}
-
-/* ─── Storage ─── */
-function useStorage() {
-  const [appData, setAppData] = useState({ tabs: [], countdowns: [] });
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = localStorage.getItem("todo-app-v6");
-        if (r) {
-          setAppData(JSON.parse(r));
+    // --- LINE Webhook（eventsプロパティあり）---
+    if (body.events) {
+      body.events.forEach(function (event) {
+        if (event.type === 'follow') {
+          handleFollow(event);
         }
-      } catch (e) {
-        console.log("No saved data");
-      }
-      setLoaded(true);
-    })();
-  }, []);
-
-  const save = useCallback(async (d) => {
-    try {
-      localStorage.setItem("todo-app-v6", JSON.stringify(d));
-    } catch (e) {
-      console.error("Save failed");
+      });
+      return ContentService.createTextOutput('OK');
     }
-  }, []);
 
-  const updateData = useCallback((d) => {
-    setAppData(d);
-    save(d);
-  }, [save]);
-
-  return { appData, updateData, loaded };
-}
-
-/* ─── Small Components ─── */
-function TimeInput({ value, onChange }) {
-  const [raw, setRaw] = useState(value || "");
-  useEffect(() => { setRaw(value || ""); }, [value]);
-
-  const normalize = (input) => {
-    const d = input.replace(/[^\d]/g, "").slice(0, 4);
-    if (!d) return "";
-    if (d.length <= 2) {
-      return String(Math.min(parseInt(d, 10), 23)).padStart(2, "0") + ":00";
+    // --- アプリからのリクエスト ---
+    switch (body.action) {
+      case 'notify':
+        return handleNotify(body);
+      case 'cancel':
+        return handleCancel(body);
+      case 'sync':
+        return handleSync(body);
+      default:
+        return ContentService.createTextOutput('unknown action');
     }
-    const h = Math.min(parseInt(d.slice(0, 2), 10), 23);
-    const m = Math.min(parseInt(d.slice(2, 4), 10), 59);
-    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
-  };
-
-  const handleChange = (e) => {
-    const digits = e.target.value.replace(/[^\d]/g, "");
-    if (digits.length > 4) return;
-    setRaw(e.target.value);
-  };
-
-  const handleBlur = () => {
-    if (!raw.trim()) { onChange(""); return; }
-    const n = normalize(raw);
-    setRaw(n);
-    onChange(n);
-  };
-
-  return (
-    <input
-      value={raw}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      onKeyDown={e => e.key === "Enter" && e.target.blur()}
-      placeholder="00:00"
-      inputMode="numeric"
-      style={{
-        width: "100%", padding: "10px 16px", borderRadius: 12,
-        border: "1px solid var(--border)", backgroundColor: "var(--bg-input)",
-        color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit",
-        outline: "none", boxSizing: "border-box", textAlign: "center",
-      }}
-    />
-  );
+  } catch (err) {
+    return ContentService.createTextOutput('error: ' + err.message);
+  }
 }
 
-function DateInput({ value, onChange, style }) {
-  const [typing, setTyping] = useState("");
+// ============================================
+// LINE フォローイベント処理
+// 友だち追加 → トークン生成 → リンク送信
+// ============================================
+function handleFollow(event) {
+  var lineUserId = event.source.userId;
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = getOrCreateSheet(ss, SHEET_USERS, ['userId', 'lineUserId', 'createdAt']);
+  var data = sheet.getDataRange().getValues();
 
-  const commitDigits = (digits) => {
-    if (!digits) return;
-    const yr = new Date().getFullYear();
-    let iso = "";
-    if (digits.length === 4) iso = `${yr}-${digits.slice(0,2)}-${digits.slice(2,4)}`;
-    else if (digits.length === 6) iso = `20${digits.slice(0,2)}-${digits.slice(2,4)}-${digits.slice(4,6)}`;
-    else if (digits.length === 8) iso = `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`;
-    if (iso) onChange(iso);
-    setTyping("");
-  };
-
-  // 入力中の表示用フォーマット
-  const typingDisplay = (d) => {
-    if (d.length <= 2) return d;
-    if (d.length <= 4) return d.slice(0,2) + "/" + d.slice(2);
-    if (d.length <= 6) return d.slice(0,4) + "/" + d.slice(4);
-    return d.slice(0,4) + "/" + d.slice(4,6) + "/" + d.slice(6);
-  };
-
-  return (
-    <div style={{ position: "relative", width: "100%" }}>
-      <input
-        type="date"
-        value={value || ""}
-        onChange={e => { onChange(e.target.value); setTyping(""); }}
-        onFocus={() => setTyping("")}
-        onBlur={() => { commitDigits(typing); }}
-        onKeyDown={e => {
-          if (/^\d$/.test(e.key)) {
-            e.preventDefault();
-            const cur = (typing + e.key).slice(0, 8);
-            setTyping(cur);
-            if (cur.length === 8) commitDigits(cur);
-            else if (cur.length === 6) { onChange(`20${cur.slice(0,2)}-${cur.slice(2,4)}-${cur.slice(4,6)}`); }
-            else if (cur.length === 4) { onChange(`${new Date().getFullYear()}-${cur.slice(0,2)}-${cur.slice(2,4)}`); }
-          } else if (e.key === "Enter") {
-            commitDigits(typing);
-          } else if (e.key === "Backspace") {
-            setTyping(t => t.slice(0, -1));
-          } else if (e.key === "Escape") {
-            setTyping("");
-          }
-        }}
-        style={{
-          width: "100%", padding: "10px 12px", borderRadius: 12,
-          border: "1px solid var(--border)", backgroundColor: "var(--bg-input)",
-          color: "var(--text-primary)",
-          fontSize: 14, fontFamily: "inherit",
-          outline: "none", boxSizing: "border-box",
-          ...style,
-        }}
-      />
-      {typing && (
-        <div style={{
-          marginTop: 4, padding: "5px 10px", borderRadius: 8,
-          backgroundColor: ACCENT, display: "inline-flex", alignItems: "center", gap: 4,
-          fontSize: 13, fontWeight: 700, color: "#fff",
-          letterSpacing: "0.06em",
-        }}>
-          {typing}
-          <span style={{ opacity: 0.6 }}>_</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Modal({ isOpen, onClose, title, children, footer }) {
-  if (!isOpen) return null;
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
-      <div style={{
-        position: "relative", backgroundColor: "var(--bg-card)", borderRadius: 20,
-        width: "min(90vw, 420px)", maxHeight: "85vh",
-        display: "flex", flexDirection: "column",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-      }}>
-        {/* Header */}
-        <div style={{ padding: "24px 24px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{title}</h3>
-          <button onClick={onClose} style={{
-            width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
-            backgroundColor: "var(--bg-badge)", color: "var(--text-tertiary)",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-          }}>✕</button>
-        </div>
-        {/* Scrollable body */}
-        <div style={{ overflowY: "auto", padding: footer ? "0 24px" : "0 24px 24px", flex: 1 }}>
-          {children}
-        </div>
-        {/* Sticky footer */}
-        {footer && (
-          <div style={{ padding: "12px 24px 20px", flexShrink: 0, borderTop: "1px solid var(--border)" }}>
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CheckIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
-}
-
-function EditIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>;
-}
-
-function TrashIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>;
-}
-
-function AppIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>;
-}
-
-function PlusIcon() {
-  return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
-}
-
-function SunIcon() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>;
-}
-
-function MoonIcon() {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>;
-}
-
-function GearIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
-
-/* ─── Countdown Panel ─── */
-function cdDaysLabel(days) {
-  if (days < 0) return { label: Math.abs(days) + "日超過", color: "#EF4444" };
-  if (days === 0) return { label: "今日！", color: "#22C55E" };
-  if (days <= 7) return { label: "あと" + days + "日", color: "#F97316" };
-  if (days <= 30) return { label: "あと" + days + "日", color: "#EAB308" };
-  return { label: "あと" + days + "日", color: ACCENT };
-}
-
-function daysBetween(startStr, endStr) {
-  if (!startStr || !endStr) return null;
-  const s = new Date(startStr + "T00:00:00");
-  const e = new Date(endStr + "T00:00:00");
-  return Math.ceil((e - s) / 86400000);
-}
-
-function CountdownPanel({ countdowns, onAdd, onDelete }) {
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [date, setDate] = useState("");
-  const [calcOpen, setCalcOpen] = useState(false);
-  const [calcStart, setCalcStart] = useState("");
-  const [calcEnd, setCalcEnd] = useState("");
-
-  const handleAdd = () => {
-    if (!name.trim() || !date) return;
-    onAdd({ id: gid(), name: name.trim(), date });
-    setName(""); setDate(""); setAdding(false);
-  };
-
-  const calcDays = daysBetween(calcStart, calcEnd);
-
-  const sectionHead = (title) => (
-    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, marginTop: 18 }}>{title}</div>
-  );
-
-  return (
-    <div style={{ padding: "16px 20px 100px" }}>
-
-      {/* ── Date Range Calculator (collapsible, first) ── */}
-      <div style={{ backgroundColor: "var(--bg-card)", borderRadius: 14, boxShadow: "var(--shadow)", overflow: "hidden", marginTop: 4 }}>
-        <button onClick={() => setCalcOpen(!calcOpen)} style={{
-          width: "100%", padding: "14px 16px", border: "none", cursor: "pointer",
-          backgroundColor: "transparent", display: "flex", justifyContent: "space-between",
-          alignItems: "center", fontFamily: "inherit",
-        }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>日数計算</span>
-          <span style={{
-            fontSize: 11, color: "var(--text-tertiary)",
-            transform: calcOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s",
-          }}>▼</span>
-        </button>
-
-        {calcOpen && (
-          <div style={{ padding: "0 16px 16px", borderTop: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4 }}>開始日</div>
-                <DateInput value={calcStart} onChange={setCalcStart} />
-              </div>
-              <div style={{ paddingTop: 18, fontSize: 18, color: "var(--text-tertiary)", fontWeight: 300 }}>→</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>終了日</div>
-                  <button onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
-                    background: "none", border: "none", cursor: "pointer", padding: "2px 4px",
-                    color: "var(--text-tertiary)", fontSize: 13, lineHeight: 1,
-                  }} title="入れ替え">⇔</button>
-                </div>
-                <DateInput value={calcEnd} onChange={setCalcEnd} />
-              </div>
-            </div>
-
-            {calcDays !== null && (
-              <div style={{
-                marginTop: 10, padding: "14px 16px", borderRadius: 12,
-                backgroundColor: calcDays < 0 ? "#FEE2E2" : calcDays === 0 ? "#DCFCE7" : "var(--bg-badge)",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-              }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
-                  {calcStart && calcEnd
-                    ? new Date(calcStart + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
-                      + " 〜 "
-                      + new Date(calcEnd + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
-                    : ""}
-                </span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "#EF4444" : calcDays === 0 ? "#22C55E" : ACCENT }}>
-                  {calcDays < 0 ? calcDays + "日" : calcDays === 0 ? "同じ日" : calcDays + "日間"}
-                </span>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Countdowns ── */}
-      {sectionHead("カウントダウン")}
-
-      {countdowns.length === 0 && !adding && (
-        <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "0 0 12px" }}>目標日を追加して残り日数を確認</p>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {countdowns.map(cd => {
-          const days = daysUntil(cd.date);
-          const { label, color } = cdDaysLabel(days);
-          return (
-            <div key={cd.id} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "14px 16px", backgroundColor: "var(--bg-card)",
-              borderRadius: 14, borderLeft: "4px solid " + color,
-              boxShadow: "var(--shadow)",
-            }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{cd.name}</div>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
-                  {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 22, fontWeight: 900, color }}>{label}</span>
-                <button onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {adding ? (
-        <div style={{ marginTop: 10, padding: "14px 16px", backgroundColor: "var(--bg-card)", borderRadius: 14, display: "flex", flexDirection: "column", gap: 8, boxShadow: "var(--shadow)" }}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="目標名" autoFocus
-            style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
-          <DateInput value={date} onChange={setDate} style={{ borderRadius: 10 }} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleAdd} disabled={!name.trim() || !date} style={{
-              flex: 1, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
-              backgroundColor: (name.trim() && date) ? ACCENT : "var(--bg-badge)",
-              color: (name.trim() && date) ? "#fff" : "var(--text-tertiary)",
-              fontSize: 13, fontWeight: 700, fontFamily: "inherit",
-            }}>追加</button>
-            <button onClick={() => setAdding(false)} style={{
-              padding: "10px 16px", borderRadius: 10, border: "1px solid var(--border)",
-              cursor: "pointer", backgroundColor: "var(--bg-card)",
-              color: "var(--text-secondary)", fontSize: 13, fontFamily: "inherit",
-            }}>キャンセル</button>
-          </div>
-        </div>
-      ) : (
-        <button onClick={() => setAdding(true)} style={{
-          marginTop: 8, padding: "10px 14px", borderRadius: 12,
-          border: "2px dashed var(--border)", cursor: "pointer",
-          backgroundColor: "transparent", color: "var(--text-tertiary)",
-          fontSize: 13, fontWeight: 500, fontFamily: "inherit", width: "100%",
-        }}>＋ 目標を追加</button>
-      )}
-    </div>
-  );
-}
-
-/* ─── Task Item ─── */
-function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabName }) {
-  const ts = tabStyle || { main: "#64748B", bg: "#F1F5F9" };
-  const isRepeat = task.repeat && task.repeat !== "none";
-  const progress = task.progress || 0;
-  const rl = getRepeatLabel(task);
-
-  const dt = task.dueDate ? new Date(task.dueDate + (task.dueTime ? "T" + task.dueTime : "T23:59")) : null;
-  const overdue = dt && dt < new Date() && !task.done;
-
-  const priObj = PRIORITIES.find(x => x.key === (task.priority || "none"));
-
-  // Progress-based partial fill: left side tinted up to progress%
-  const fillColor = ts.main + "28"; // ~16% opacity tint
-  const cardBg = !task.done && progress > 0
-    ? `linear-gradient(to right, ${fillColor} ${progress}%, var(--bg-card) ${progress}%)`
-    : "var(--bg-card)";
-
-  return (
-    <div style={{
-      display: "flex", alignItems: "flex-start", gap: 14, padding: "8px 16px",
-      background: cardBg, borderRadius: 16, marginBottom: 4,
-      borderLeft: "3px solid " + ts.main,
-      opacity: task.done ? 0.45 : 1, position: "relative",
-      transition: "background 0.3s",
-    }}>
-
-      <button onClick={() => onToggle(task.id)} style={{
-        width: 24, height: 24, minWidth: 24, borderRadius: 8, border: "none",
-        cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        marginTop: 1, position: "relative", zIndex: 1,
-        boxShadow: task.done ? "0 2px 8px " + ts.main + "40" : "inset 0 1px 3px rgba(0,0,0,0.1)",
-      }}>
-        {task.done && <CheckIcon />}
-      </button>
-
-      <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-          {!isRepeat && priObj && priObj.key !== "none" && (
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11,
-              fontWeight: 700, color: priObj.color, backgroundColor: priObj.bg,
-              padding: "2px 8px", borderRadius: 6, marginRight: 4,
-            }}>{priObj.icon} {priObj.label}</span>
-          )}
-          <span style={{
-            fontSize: 15, lineHeight: 1.5, color: "var(--text-primary)", fontWeight: 500,
-            textDecoration: task.done ? "line-through" : "none", wordBreak: "break-word",
-          }}>{task.text}</span>
-        </div>
-
-        {task.memo && (
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-          {showTabName && task._tabName && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
-          )}
-          {!task.done && (
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
-              color: progress === 100 ? "#15803D" : progress > 0 ? ts.main : "var(--text-tertiary)",
-              backgroundColor: progress === 100 ? "#DCFCE7" : progress > 0 ? ts.main + "22" : "var(--bg-badge)",
-            }}>{progress}%</span>
-          )}
-          {rl && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#14B8A6", backgroundColor: "#CCFBF1", padding: "2px 8px", borderRadius: 6 }}>{rl}</span>
-          )}
-          {task.dueDate && (
-            <span style={{
-              fontSize: 11, fontWeight: 600,
-              color: overdue ? "#EF4444" : "var(--text-tertiary)",
-              backgroundColor: overdue ? "#FEE2E2" : "var(--bg-badge)",
-              padding: "2px 8px", borderRadius: 6,
-            }}>
-              {"📅 " + new Date(task.dueDate).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }) + (task.dueTime ? " " + task.dueTime : "")}
-            </span>
-          )}
-          {!task.dueDate && task.dueTime && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>{task.dueTime}</span>
-          )}
-          {task.notify && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
-              {"通知 " + ((NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming) || {}).label || "")}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 4, marginTop: 1, position: "relative", zIndex: 1 }}>
-        {onMove && (
-          <button onClick={() => onMove(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        )}
-        <button onClick={() => onEdit(task)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>
-          <EditIcon />
-        </button>
-        <button onClick={() => onDelete(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>
-          <TrashIcon />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Repeat Detail ─── */
-function RepeatDetail({ task, setTask }) {
-  const r = task.repeat;
-  const toggleDay = (i) => {
-    const d = task.repeatDays || [];
-    setTask({ ...task, repeatDays: d.includes(i) ? d.filter(x => x !== i) : [...d, i].sort() });
-  };
-
-  const btnStyle = (sel) => ({
-    padding: "6px 14px", borderRadius: 10, border: "none", cursor: "pointer",
-    fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-    backgroundColor: sel ? "#14B8A6" : "var(--bg-card)",
-    color: sel ? "#fff" : "var(--text-secondary)",
-  });
-
-  const DayPicker = () => (
-    <div>
-      <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "0 0 8px" }}>曜日を選択（複数可）</p>
-      <div style={{ display: "flex", gap: 5 }}>
-        {WEEKDAYS_JP.map((d, i) => {
-          const sel = (task.repeatDays || []).includes(i);
-          return (
-            <button key={i} onClick={() => toggleDay(i)} style={{
-              width: 38, height: 38, borderRadius: 10,
-              border: sel ? "none" : "1px solid var(--border)",
-              cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-              backgroundColor: sel ? "#14B8A6" : "var(--bg-card)",
-              color: sel ? "#fff" : i === 0 ? "#EF4444" : i === 6 ? "#3B82F6" : "var(--text-secondary)",
-            }}>{d}</button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const MonthPicker = () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => setTask({ ...task, monthMode: "date" })} style={btnStyle(task.monthMode !== "weekday")}>日付</button>
-        <button onClick={() => setTask({ ...task, monthMode: "weekday", monthOrdinal: task.monthOrdinal || 1, monthWeekday: task.monthWeekday != null ? task.monthWeekday : 1 })} style={btnStyle(task.monthMode === "weekday")}>曜日</button>
-      </div>
-      {task.monthMode !== "weekday" ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>毎月</span>
-          <input type="number" min="1" max="31" value={task.repeatMonthDay || 1}
-            onChange={e => setTask({ ...task, repeatMonthDay: Math.min(31, Math.max(1, parseInt(e.target.value) || 1)) })}
-            style={{ width: 60, padding: "8px 10px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none", textAlign: "center" }}
-          />
-          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>日</span>
-        </div>
-      ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <select value={task.monthOrdinal || 1} onChange={e => setTask({ ...task, monthOrdinal: parseInt(e.target.value) })}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
-            {ORDINALS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-          </select>
-          <select value={task.monthWeekday != null ? task.monthWeekday : 1} onChange={e => setTask({ ...task, monthWeekday: parseInt(e.target.value) })}
-            style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit", outline: "none" }}>
-            {WEEKDAYS_JP.map((d, i) => <option key={i} value={i}>{d}曜</option>)}
-          </select>
-        </div>
-      )}
-    </div>
-  );
-
-  if (r === "weekly") return <DayPicker />;
-  if (r === "monthly") return <MonthPicker />;
-  if (r !== "custom") return null;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input type="number" min="1" max="99" value={task.customInterval || 1}
-          onChange={e => setTask({ ...task, customInterval: Math.max(1, parseInt(e.target.value) || 1) })}
-          style={{ width: 56, padding: "8px 10px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none", textAlign: "center" }}
-        />
-        <div style={{ display: "flex", gap: 4 }}>
-          {CUSTOM_UNITS.map(u => (
-            <button key={u.key} onClick={() => setTask({ ...task, customUnit: u.key })} style={btnStyle((task.customUnit || "day") === u.key)}>{u.label}</button>
-          ))}
-        </div>
-        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>ごと</span>
-      </div>
-      {(task.customUnit || "day") === "week" && <DayPicker />}
-      {(task.customUnit || "day") === "month" && <MonthPicker />}
-    </div>
-  );
-}
-
-/* ─── Task Form ─── */
-function TaskForm({ task, setTask, onSubmit, submitLabel }) {
-  const isRepeat = task.repeat && task.repeat !== "none";
-  const timeRef = useRef(null);
-  const repeatDetailRef = useRef(null);
-
-  // 繰り返し詳細が展開されたら最下部へスクロール
-  useEffect(() => {
-    if (isRepeat && repeatDetailRef.current) {
-      setTimeout(() => {
-        repeatDetailRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-      }, 50);
+  // 既存ユーザーチェック（ブロック解除→再追加の場合）
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][1] === lineUserId) {
+      // 既にいる → 同じトークンのリンクを再送
+      sendWelcomeMessage(lineUserId, data[i][0]);
+      return;
     }
-  }, [task.repeat]);
-
-  const handleRepeatChange = (e) => {
-    const v = e.target.value;
-    const next = { ...task, repeat: v };
-    if (v !== "none") next.priority = "none";
-    if (v === "weekdays") next.repeatDays = [1, 2, 3, 4, 5];
-    if (v === "weekly") next.repeatDays = next.repeatDays || [];
-    if (v === "monthly") {
-      next.repeatMonthDay = next.repeatMonthDay || 1;
-      next.monthMode = next.monthMode || "date";
-    }
-    if (v === "custom") {
-      next.customInterval = next.customInterval || 1;
-      next.customUnit = next.customUnit || "day";
-    }
-    setTask(next);
-  };
-
-  return (
-    <div>
-      <input value={task.text} onChange={e => setTask({ ...task, text: e.target.value })}
-        placeholder="タスク名" autoFocus
-        onKeyDown={e => { if (e.key === "Enter" && task.text.trim()) onSubmit(); }}
-        style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12 }}
-      />
-
-      {/* メモ（自動伸縮） */}
-      <textarea value={task.memo || ""} onChange={e => {
-          setTask({ ...task, memo: e.target.value });
-          e.target.style.height = "auto";
-          e.target.style.height = e.target.scrollHeight + "px";
-        }}
-        onFocus={e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-        placeholder="メモ" rows={1}
-        style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box", marginBottom: 14, overflow: "hidden" }}
-      />
-
-      {/* 期限 */}
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>{isRepeat ? "時刻" : "期限"}</label>
-        <div style={{ display: "flex", gap: 10 }}>
-          {!isRepeat && (
-            <div style={{ flex: 1 }}>
-              <DateInput value={task.dueDate || ""} onChange={v => {
-                const wasEmpty = !task.dueDate;
-                setTask({ ...task, dueDate: v });
-                if (wasEmpty && v) {
-                  setTimeout(() => {
-                    const el = timeRef.current;
-                    if (el) { const inp = el.querySelector("input"); if (inp) inp.focus(); }
-                  }, 100);
-                }
-              }} />
-            </div>
-          )}
-          <div style={{ flex: isRepeat ? 1 : 0.7 }} ref={timeRef}>
-            <TimeInput value={task.dueTime || ""} onChange={v => setTask({ ...task, dueTime: v })} />
-          </div>
-        </div>
-      </div>
-
-      {/* 通知 */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "12px 16px", backgroundColor: "var(--bg-badge)",
-          borderRadius: task.notify ? "12px 12px 0 0" : 12,
-        }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>LINE通知</span>
-          <button onClick={() => setTask({ ...task, notify: !task.notify, notifyTiming: task.notifyTiming || "on_time" })}
-            style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: task.notify ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
-            <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: task.notify ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
-          </button>
-        </div>
-        {task.notify && (
-          <div style={{ padding: "10px 16px", backgroundColor: "var(--bg-badge)", borderRadius: "0 0 12px 12px", borderTop: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {NOTIFY_OPTIONS.map(n => (
-                <button key={n.key} onClick={() => setTask({ ...task, notifyTiming: n.key })} style={{
-                  padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-                  backgroundColor: task.notifyTiming === n.key ? ACCENT : "var(--bg-card)",
-                  color: task.notifyTiming === n.key ? "#fff" : "var(--text-secondary)",
-                }}>{n.label}</button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 優先度 */}
-      {!isRepeat && (
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>優先度</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {PRIORITIES.map(p => (
-              <button key={p.key} onClick={() => setTask({ ...task, priority: p.key })} style={{
-                padding: "7px 14px", borderRadius: 10, border: "none", cursor: "pointer",
-                fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                backgroundColor: task.priority === p.key ? p.color : "var(--bg-badge)",
-                color: task.priority === p.key ? "#fff" : "var(--text-secondary)",
-              }}>{p.icon + " " + p.label}</button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 進捗（100%で完了） */}
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>{"進捗 " + (task.progress || 0) + "%"}</label>
-        <input type="range" min="0" max="100" step="5" value={task.progress || 0}
-          onChange={e => {
-            const v = parseInt(e.target.value);
-            setTask({ ...task, progress: v, done: v === 100 ? true : task.done });
-          }}
-          style={{ width: "100%", accentColor: ACCENT }}
-        />
-      </div>
-
-      {/* 繰り返し */}
-      <div style={{ marginBottom: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>繰り返し</label>
-        <select value={task.repeat || "none"} onChange={handleRepeatChange}
-          style={{ width: "100%", padding: "10px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}>
-          {REPEAT_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
-        {isRepeat && (
-          <div ref={repeatDetailRef} style={{ marginTop: 10, padding: "12px 14px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
-            <RepeatDetail task={task} setTask={setTask} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Welcome ─── */
-function WelcomeScreen({ onCreateTab }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState(TAB_COLORS[0].value);
-  const suggestions = ["仕事", "買い物", "プライベート", "勉強", "健康", "趣味"];
-
-  return (
-    <div style={{ padding: "60px 24px", textAlign: "center", maxWidth: 400, margin: "0 auto" }}>
-      <div style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-      </div>
-      <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリストへようこそ</h2>
-      <p style={{ margin: "0 0 24px", fontSize: 14, color: "var(--text-secondary)" }}>最初のタブを作成して始めましょう。</p>
-
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="タブ名を入力"
-        onKeyDown={e => { if (e.key === "Enter" && name.trim()) { onCreateTab(name.trim(), color); setName(""); } }}
-        style={{ width: "100%", padding: "14px 18px", borderRadius: 14, border: "2px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12 }}
-      />
-
-      <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 16 }}>
-        {TAB_COLORS.map(c => (
-          <button key={c.value} onClick={() => setColor(c.value)} style={{
-            width: 28, height: 28, borderRadius: 8, border: "none", cursor: "pointer",
-            backgroundColor: c.value,
-            outline: color === c.value ? "3px solid var(--text-primary)" : "none",
-            outlineOffset: 2,
-          }} />
-        ))}
-      </div>
-
-      <button onClick={() => { if (name.trim()) { onCreateTab(name.trim(), color); setName(""); } }}
-        disabled={!name.trim()}
-        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: name.trim() ? ACCENT : "var(--bg-badge)", color: name.trim() ? "#fff" : "var(--text-tertiary)", fontSize: 15, fontWeight: 700, fontFamily: "inherit", marginBottom: 28 }}>
-        タブを作成
-      </button>
-
-      <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 12 }}>よく使われるタブ名：</p>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-        {suggestions.map(s => (
-          <button key={s} onClick={() => setName(s)} style={{ padding: "8px 16px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-card)", color: "var(--text-secondary)", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>{s}</button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Main App ─── */
-function TodoApp() {
-  const { appData, updateData, loaded } = useStorage();
-  const tabs = appData.tabs || [];
-  const countdowns = appData.countdowns || [];
-
-  const setTabs = (newTabs) => updateData({ ...appData, tabs: newTabs });
-  const setCountdowns = (newCd) => updateData({ ...appData, countdowns: newCd });
-
-  const [activeTabId, setActiveTabId] = useState(ALL_TAB);
-  const [darkMode, setDarkMode] = useState(false);
-  const [showAddTask, setShowAddTask] = useState(false);
-  const [showAddTab, setShowAddTab] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
-  const [newTask, setNewTask] = useState({ ...emptyTask });
-  const [newTabName, setNewTabName] = useState("");
-  const [newTabColor, setNewTabColor] = useState(TAB_COLORS[0].value);
-  const [delTabId, setDelTabId] = useState(null);
-  const [editingTabId, setEditingTabId] = useState(null);
-  const [editTabName, setEditTabName] = useState("");
-  const [editTabColor, setEditTabColor] = useState("");
-  const [editTabPinned, setEditTabPinned] = useState(false);
-  const [sortKey, setSortKey] = useState("created");
-  const [sortDir, setSortDir] = useState(SORT_DEFAULTS["created"]);
-  const [addToTabId, setAddToTabId] = useState(null);
-  const [movingTaskId, setMovingTaskId] = useState(null);
-  const [confirmClearDone, setConfirmClearDone] = useState(false);
-  const [dragTabId, setDragTabId] = useState(null);
-  const [dragOverTabId, setDragOverTabId] = useState(null);
-
-  const moveTask = (taskId, toTabId) => {
-    let movedTask = null;
-    const newTabs = tabs.map(t => {
-      const found = t.tasks.find(x => x.id === taskId);
-      if (found) { movedTask = found; return { ...t, tasks: t.tasks.filter(x => x.id !== taskId) }; }
-      return t;
-    });
-    if (movedTask) {
-      setTabs(newTabs.map(t => t.id === toTabId ? { ...t, tasks: [...t.tasks, movedTask] } : t));
-    }
-    setMovingTaskId(null);
-  };
-
-  const isAllView = activeTabId === ALL_TAB;
-  const isCountdownView = activeTabId === COUNTDOWN_TAB;
-  const activeTab = tabs.find(t => t.id === activeTabId);
-
-  // Actions
-  const createTab = (name, color) => {
-    const tab = { id: gid(), name: name, color: color || TAB_COLORS[0].value, tasks: [] };
-    setTabs([...tabs, tab]);
-    setActiveTabId(tab.id);
-  };
-
-  const addTab = () => {
-    if (!newTabName.trim()) return;
-    createTab(newTabName.trim(), newTabColor);
-    setNewTabName("");
-    setNewTabColor(TAB_COLORS[0].value);
-    setShowAddTab(false);
-  };
-
-  const deleteTab = (id) => {
-    const remaining = tabs.filter(t => t.id !== id);
-    setTabs(remaining);
-    if (activeTabId === id) setActiveTabId(ALL_TAB);
-    setDelTabId(null);
-  };
-
-  const startEditTab = (tab) => {
-    setEditingTabId(tab.id);
-    setEditTabName(tab.name);
-    setEditTabColor(tab.color || TAB_COLORS[0].value);
-    setEditTabPinned(!!tab.pinned);
-  };
-
-  const commitEditTab = () => {
-    if (editTabName.trim()) {
-      setTabs(tabs.map(t => t.id === editingTabId
-        ? { ...t, name: editTabName.trim(), color: editTabColor, pinned: editTabPinned }
-        : t
-      ));
-    }
-    setEditingTabId(null);
-  };
-
-  const moveTab = (fromId, toId) => {
-    const from = tabs.findIndex(t => t.id === fromId);
-    const to = tabs.findIndex(t => t.id === toId);
-    if (from < 0 || to < 0 || from === to) return;
-    const arr = [...tabs];
-    const [moved] = arr.splice(from, 1);
-    arr.splice(to, 0, moved);
-    setTabs(arr);
-  };
-
-  const handleAddTask = () => {
-    const targetTabId = isAllView ? addToTabId : activeTabId;
-    if (!newTask.text.trim() || !targetTabId) return;
-    const task = { id: gid(), ...newTask, text: newTask.text.trim(), done: false, createdAt: Date.now() };
-    setTabs(tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t));
-    sendNotifyToGAS(task);
-    setNewTask({ ...emptyTask });
-    setShowAddTask(false);
-    setAddToTabId(null);
-  };
-
-  const updateTask = () => {
-    if (!editingTask || !editingTask.text.trim()) return;
-    setTabs(tabs.map(t => ({
-      ...t,
-      tasks: t.tasks.map(x => x.id === editingTask.id ? { ...editingTask } : x),
-    })));
-    sendNotifyToGAS(editingTask);
-    setEditingTask(null);
-  };
-
-  const toggleTask = (id) => {
-    setTabs(tabs.map(t => ({
-      ...t,
-      tasks: t.tasks.map(x => x.id === id ? { ...x, done: !x.done } : x),
-    })));
-  };
-
-  const deleteTask = (id) => {
-    setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => x.id !== id) })));
-  };
-
-  const clearDone = () => {
-    if (isAllView) {
-      setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) })));
-    } else {
-      setTabs(tabs.map(t => t.id === activeTabId ? { ...t, tasks: t.tasks.filter(x => !x.done) } : t));
-    }
-  };
-
-  const resetData = async () => {
-    try { localStorage.removeItem("todo-app-v6"); } catch (e) {}
-    window.location.reload();
-  };
-
-  // Build task list
-  const allTasks = tabs.flatMap(t =>
-    t.tasks.map(task => ({ ...task, _tabId: t.id, _tabName: t.name, _tabColor: t.color }))
-  );
-
-  const currentTasks = isAllView
-    ? allTasks
-    : (activeTab ? activeTab.tasks.map(t => ({ ...t, _tabId: activeTab.id, _tabColor: activeTab.color })) : []);
-
-  const sorted = doSort(currentTasks, sortKey, sortDir);
-  const doneCount = currentTasks.filter(t => t.done).length;
-  const totalCount = currentTasks.length;
-
-  const themeVars = {
-    "--bg-main":     darkMode ? "#0D1117" : "#F0F2F5",
-    "--bg-card":     darkMode ? "#161B2E" : "#FFFFFF",
-    "--bg-header":   darkMode ? "#0D1117" : "#FFFFFF",
-    "--bg-checkbox": darkMode ? "#1E2640" : "#E8EBF0",
-    "--bg-badge":    darkMode ? "#1E2640" : "#F0F2F5",
-    "--bg-input":    darkMode ? "#1E2640" : "#F0F2F5",
-    "--text-primary":   darkMode ? "#E2E8F4" : "#1A1D27",
-    "--text-secondary": darkMode ? "#8B9EC7" : "#6B7280",
-    "--text-tertiary":  darkMode ? "#4D6090" : "#9CA3AF",
-    "--border":      darkMode ? "#1E2640" : "#E5E7EB",
-    "--shadow":      darkMode ? "0 2px 16px rgba(0,0,0,0.5)" : "0 2px 12px rgba(0,0,0,0.06)",
-  };
-
-  if (!loaded) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F0F2F5" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid #E5E7EB", borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-        <style>{"@keyframes spin { to { transform: rotate(360deg) } }"}</style>
-      </div>
-    );
   }
 
-  return (
-    <div style={{ ...themeVars, minHeight: "100vh", backgroundColor: "var(--bg-main)", fontFamily: "'Noto Sans JP','Hiragino Sans',sans-serif" }}>
-
-      {/* ─── Header ─── */}
-      <div style={{ backgroundColor: "var(--bg-header)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100, boxShadow: "var(--shadow)" }}>
-        <div style={{ padding: "16px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: ACCENT, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <AppIcon />
-            </div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリスト</h1>
-            {/* 日付チップ → カウントダウンタブへ */}
-            <button onClick={() => setActiveTabId(activeTabId === COUNTDOWN_TAB ? (tabs.length > 0 ? ALL_TAB : ALL_TAB) : COUNTDOWN_TAB)} style={{
-              padding: "5px 10px", borderRadius: 10, border: "none", cursor: "pointer",
-              backgroundColor: activeTabId === COUNTDOWN_TAB ? "#F97316" : "var(--bg-badge)",
-              color: activeTabId === COUNTDOWN_TAB ? "#fff" : "var(--text-secondary)",
-              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-              display: "flex", alignItems: "center", gap: 5,
-              transition: "background-color 0.2s",
-            }}>
-              <span>📅</span>
-              <span>{new Date().toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" })}</span>
-            </button>
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => setDarkMode(!darkMode)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {darkMode ? <SunIcon /> : <MoonIcon />}
-            </button>
-            <button onClick={() => setShowSettings(true)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <GearIcon />
-            </button>
-          </div>
-        </div>
-
-        {/* Tab bar */}
-        {tabs.length > 0 && (
-          <div
-            id="tab-scroll-bar"
-            style={{ display: "flex", alignItems: "center", padding: "12px 12px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-
-            {/* ピン止め → 先頭、それ以外は後ろ */}
-            {[...tabs.filter(t => t.pinned), ...tabs.filter(t => !t.pinned)].map(tab => {
-              const isActive = tab.id === activeTabId;
-              const undone = tab.tasks.filter(t => !t.done).length;
-              const tabC = tab.color || "#64748B";
-              const MAX_LEN = 4;
-              const displayName = !isActive && tab.name.length > MAX_LEN
-                ? tab.name.slice(0, MAX_LEN) + "…"
-                : tab.name;
-              const isDragging = dragTabId === tab.id;
-              const isDragOver = dragOverTabId === tab.id && dragTabId !== tab.id;
-              return (
-                <div key={tab.id}
-                  draggable
-                  onDragStart={() => setDragTabId(tab.id)}
-                  onDragOver={e => { e.preventDefault(); setDragOverTabId(tab.id); }}
-                  onDrop={() => {
-                    if (dragTabId && dragTabId !== tab.id) moveTab(dragTabId, tab.id);
-                    setDragTabId(null); setDragOverTabId(null);
-                  }}
-                  onDragEnd={() => { setDragTabId(null); setDragOverTabId(null); }}
-                  style={{
-                    display: "flex", alignItems: "center",
-                    opacity: isDragging ? 0.4 : 1,
-                    borderLeft: isDragOver ? "2px solid " + tabC : "2px solid transparent",
-                    transition: "opacity 0.15s, border 0.1s",
-                  }}>
-                  <button
-                    onClick={() => setActiveTabId(tab.id)}
-                    style={{
-                      padding: "10px 14px", border: "none", cursor: "pointer",
-                      fontSize: isActive ? 14 : 13,
-                      fontWeight: isActive ? 700 : 500, whiteSpace: "nowrap",
-                      color: isActive ? tabC : "var(--text-secondary)",
-                      backgroundColor: "transparent",
-                      borderBottom: isActive ? "3px solid " + tabC : "3px solid transparent",
-                      fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
-                    }}>
-                    {tab.pinned && <span style={{ fontSize: 9, opacity: 0.4 }}>📌</span>}
-                    <span style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tabC, display: "inline-block", flexShrink: 0 }} />
-                    {displayName}
-                    {undone > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: isActive ? tabC : "var(--bg-badge)", color: isActive ? "#fff" : "var(--text-secondary)", padding: "1px 6px", borderRadius: 10 }}>
-                        {undone}
-                      </span>
-                    )}
-                  </button>
-                  {isActive && (
-                    <button onClick={() => setDelTabId(tab.id)} style={{
-                      width: 20, height: 20, borderRadius: 6, border: "none", cursor: "pointer",
-                      backgroundColor: "transparent", color: "var(--text-tertiary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 14, marginLeft: -6, marginRight: 2, opacity: 0.6,
-                    }}>✕</button>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* すべて（+の左） */}
-            <button onClick={() => setActiveTabId(ALL_TAB)} style={{
-              padding: "10px 14px", border: "none", cursor: "pointer", fontSize: 14,
-              fontWeight: isAllView ? 700 : 500, whiteSpace: "nowrap",
-              color: isAllView ? ACCENT : "var(--text-secondary)",
-              backgroundColor: "transparent",
-              borderBottom: isAllView ? "3px solid " + ACCENT : "3px solid transparent",
-              fontFamily: "inherit",
-            }}>
-              すべて
-              {allTasks.filter(t => !t.done).length > 0 && (
-                <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, backgroundColor: isAllView ? ACCENT : "var(--bg-badge)", color: isAllView ? "#fff" : "var(--text-secondary)", padding: "1px 7px", borderRadius: 10, verticalAlign: "middle" }}>
-                  {allTasks.filter(t => !t.done).length}
-                </span>
-              )}
-            </button>
-
-            <button onClick={() => setShowAddTab(true)} style={{
-              width: 28, height: 28, minWidth: 28, borderRadius: 8,
-              border: "2px dashed var(--border)", cursor: "pointer",
-              backgroundColor: "transparent", color: "var(--text-tertiary)",
-              fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: 4,
-            }}>+</button>
-          </div>
-        )}
-      </div>
-
-      {/* ─── Body ─── */}
-      {tabs.length === 0 ? (
-        <WelcomeScreen onCreateTab={createTab} />
-      ) : activeTabId === COUNTDOWN_TAB ? (
-        <CountdownPanel
-          countdowns={countdowns}
-          onAdd={(cd) => setCountdowns([...countdowns, cd])}
-          onDelete={(id) => setCountdowns(countdowns.filter(c => c.id !== id))}
-        />
-      ) : (
-        <div>
-          <div style={{ padding: "12px 16px 100px", minHeight: "50vh" }}>
-            {/* Sort */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "0 4px", flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 4 }}>
-                <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600 }}>並べ替え</span>
-                <button onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")} style={{
-                  background: "none", border: "none", cursor: "pointer", padding: 2,
-                  color: "var(--text-tertiary)", display: "flex", alignItems: "center",
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    {sortDir === "asc"
-                      ? <><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></>
-                      : <><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></>
-                    }
-                  </svg>
-                </button>
-              </div>
-              {SORT_OPTIONS.map(s => (
-                <button key={s.key} onClick={() => {
-                  setSortKey(s.key);
-                  setSortDir(SORT_DEFAULTS[s.key]);
-                }} style={{
-                  padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer",
-                  fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-                  backgroundColor: sortKey === s.key ? ACCENT : "var(--bg-badge)",
-                  color: sortKey === s.key ? "#fff" : "var(--text-secondary)",
-                }}>{s.label}</button>
-              ))}
-              {!isAllView && activeTab && (
-                <button onClick={() => startEditTab(activeTab)} style={{
-                  marginLeft: "auto", padding: "4px 10px", borderRadius: 8,
-                  border: "1px solid var(--border)", cursor: "pointer",
-                  fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                  backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
-                  display: "flex", alignItems: "center", gap: 4,
-                }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  タブを編集
-                </button>
-              )}
-            </div>
-
-            {/* Stats */}
-            {totalCount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "0 4px" }}>
-                <span style={{ fontSize: 13, color: "var(--text-tertiary)", fontWeight: 500 }}>{doneCount + "/" + totalCount + " 完了"}</span>
-                {doneCount > 0 && (
-                  <button onClick={() => setConfirmClearDone(true)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#EF4444", fontWeight: 600, fontFamily: "inherit" }}>完了済みを削除</button>
-                )}
-              </div>
-            )}
-
-            {totalCount > 0 && (
-              <div style={{ height: 6, backgroundColor: "var(--bg-badge)", borderRadius: 3, marginBottom: 14, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: (totalCount > 0 ? (doneCount / totalCount) * 100 : 0) + "%", backgroundColor: ACCENT, borderRadius: 3, transition: "width 0.4s" }} />
-              </div>
-            )}
-
-            {/* Empty */}
-            {totalCount === 0 && (
-              <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--text-tertiary)" }}>
-                <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.4 }}>📝</div>
-                <p style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>タスクがありません</p>
-              </div>
-            )}
-
-            {/* Task list */}
-            {sorted.map(task => {
-              const tab = tabs.find(t => t.id === (task._tabId));
-              const ts = getTabStyle(tab || { color: task._tabColor }, darkMode);
-              return (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  tabStyle={ts}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                  onEdit={setEditingTask}
-                  onMove={tabs.length > 1 ? setMovingTaskId : null}
-                  showTabName={isAllView}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* FAB */}
-      {tabs.length > 0 && !isCountdownView && (
-        <button onClick={() => {
-          if (isAllView && tabs.length === 1) {
-            setAddToTabId(tabs[0].id);
-          } else if (isAllView) {
-            setAddToTabId(null);
-          } else {
-            setAddToTabId(activeTabId);
-          }
-          setShowAddTask(true);
-        }} style={{
-          position: "fixed", bottom: 28, right: 28, width: 60, height: 60,
-          borderRadius: 18, border: "none", cursor: "pointer",
-          backgroundColor: ACCENT, boxShadow: "0 6px 24px " + ACCENT + "50",
-          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50,
-        }}
-          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-        >
-          <PlusIcon />
-        </button>
-      )}
-
-      {/* ─── Modals ─── */}
-      <Modal isOpen={showAddTask} onClose={() => { setShowAddTask(false); setAddToTabId(null); }} title="タスクを追加"
-        footer={addToTabId ? (
-          <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
-            width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: newTask.text.trim() ? ACCENT : "var(--bg-badge)",
-            color: newTask.text.trim() ? "#fff" : "var(--text-tertiary)",
-            fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-          }}>追加</button>
-        ) : null}>
-        {isAllView && !addToTabId && (
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>追加先のタブ</label>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {tabs.map(t => (
-                <button key={t.id} onClick={() => setAddToTabId(t.id)} style={{
-                  padding: "8px 16px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                  backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color || "#64748B" }} />
-                  {t.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        {addToTabId && (
-          <TaskForm task={newTask} setTask={setNewTask} onSubmit={handleAddTask} submitLabel="追加" />
-        )}
-      </Modal>
-
-      <Modal isOpen={editingTask !== null} onClose={() => setEditingTask(null)} title="タスクを編集"
-        footer={editingTask ? (
-          <button onClick={updateTask} disabled={!editingTask.text.trim()} style={{
-            width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: editingTask.text.trim() ? ACCENT : "var(--bg-badge)",
-            color: editingTask.text.trim() ? "#fff" : "var(--text-tertiary)",
-            fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-          }}>保存</button>
-        ) : null}>
-        {editingTask && (
-          <TaskForm task={editingTask} setTask={setEditingTask} onSubmit={updateTask} submitLabel="保存" />
-        )}
-      </Modal>
-
-      <Modal isOpen={showAddTab} onClose={() => { setShowAddTab(false); setNewTabName(""); }} title="タブを追加">
-        <input value={newTabName} onChange={e => setNewTabName(e.target.value)} placeholder="タブ名" autoFocus
-          onKeyDown={e => e.key === "Enter" && addTab()}
-          style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12 }}
-        />
-        <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>タブの色</label>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {TAB_COLORS.map(c => (
-            <button key={c.value} onClick={() => setNewTabColor(c.value)} style={{
-              width: 30, height: 30, borderRadius: 9, border: "none", cursor: "pointer",
-              backgroundColor: c.value,
-              outline: newTabColor === c.value ? "3px solid var(--text-primary)" : "none",
-              outlineOffset: 2,
-            }} />
-          ))}
-        </div>
-        <button onClick={addTab} disabled={!newTabName.trim()} style={{
-          width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer",
-          backgroundColor: newTabName.trim() ? ACCENT : "var(--bg-badge)",
-          color: newTabName.trim() ? "#fff" : "var(--text-tertiary)",
-          fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-        }}>追加</button>
-      </Modal>
-
-      <Modal isOpen={editingTabId !== null} onClose={() => setEditingTabId(null)} title="タブを編集"
-        footer={
-          <button onClick={commitEditTab} disabled={!editTabName.trim()} style={{
-            width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: editTabName.trim() ? editTabColor : "var(--bg-badge)",
-            color: editTabName.trim() ? "#fff" : "var(--text-tertiary)",
-            fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-          }}>保存</button>
-        }>
-        <div style={{ paddingBottom: 8 }}>
-          <input value={editTabName} onChange={e => setEditTabName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && commitEditTab()}
-            autoFocus
-            style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 16 }}
-          />
-          <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 10 }}>タブの色</label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-            {TAB_COLORS.map(c => (
-              <button key={c.value} onClick={() => setEditTabColor(c.value)} style={{
-                width: 32, height: 32, borderRadius: 9, border: "none", cursor: "pointer",
-                backgroundColor: c.value,
-                outline: editTabColor === c.value ? "3px solid var(--text-primary)" : "none",
-                outlineOffset: 2,
-              }} />
-            ))}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>ピン止め（先頭に表示）</span>
-            <button onClick={() => setEditTabPinned(p => !p)} style={{
-              width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-              backgroundColor: editTabPinned ? ACCENT : "var(--bg-checkbox)", position: "relative",
-            }}>
-              <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: editTabPinned ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal isOpen={delTabId !== null} onClose={() => setDelTabId(null)} title="タブを削除">
-        <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6, margin: "0 0 20px" }}>
-          {"「" + ((tabs.find(t => t.id === delTabId) || {}).name || "") + "」タブと中のタスクを削除します。"}
-        </p>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setDelTabId(null)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "1px solid var(--border)", cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: "inherit" }}>キャンセル</button>
-          <button onClick={() => deleteTab(delTabId)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
-        </div>
-      </Modal>
-
-      <Modal isOpen={showSettings} onClose={() => setShowSettings(false)} title="設定">
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {/* ダークモード */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12,
-          }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>ダークモード</span>
-            <button onClick={() => setDarkMode(!darkMode)}
-              style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: darkMode ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
-              <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: darkMode ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
-            </button>
-          </div>
-
-          {/* 完了済みを一括削除 */}
-          <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) }))); setShowSettings(false); }} style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
-            fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
-          }}>完了済みタスクをすべて削除</button>
-
-          {/* カウントダウンを全削除 */}
-          <button onClick={() => { setCountdowns([]); setShowSettings(false); }} style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
-            fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
-          }}>カウントダウンをすべて削除</button>
-
-          {/* データリセット */}
-          <div style={{ marginTop: 8, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <button onClick={resetData} style={{
-              width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-              backgroundColor: "#FEF2F2", color: "#EF4444",
-              fontSize: 14, fontWeight: 700, fontFamily: "inherit",
-            }}>すべてのデータをリセット</button>
-            <p style={{ fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", marginTop: 8, marginBottom: 0 }}>タブ・タスク・カウントダウンがすべて削除されます</p>
-          </div>
-        </div>
-      </Modal>
-
-      {/* ─── Move Task Modal ─── */}
-      <Modal isOpen={confirmClearDone} onClose={() => setConfirmClearDone(false)} title="完了済みを削除">
-        <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6, margin: "0 0 20px" }}>
-          完了済みのタスクをすべて削除します。この操作は元に戻せません。
-        </p>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => setConfirmClearDone(false)} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: "inherit" }}>キャンセル</button>
-          <button onClick={() => { clearDone(); setConfirmClearDone(false); }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
-        </div>
-      </Modal>
-
-      <Modal isOpen={movingTaskId !== null} onClose={() => setMovingTaskId(null)} title="タブを移動">
-        {movingTaskId && (() => {
-          const task = tabs.flatMap(t => t.tasks).find(x => x.id === movingTaskId);
-          const currentTabId = tabs.find(t => t.tasks.some(x => x.id === movingTaskId))?.id;
-          return (
-            <div>
-              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "0 0 16px", lineHeight: 1.6 }}>
-                「{task?.text}」の移動先を選んでください
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {tabs.filter(t => t.id !== currentTabId).map(t => (
-                  <button key={t.id} onClick={() => moveTask(movingTaskId, t.id)} style={{
-                    padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-                    backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
-                    fontSize: 14, fontWeight: 600, fontFamily: "inherit",
-                    display: "flex", alignItems: "center", gap: 10, textAlign: "left",
-                  }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: t.color || "#64748B", flexShrink: 0 }} />
-                    {t.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-      </Modal>
-
-      <style>{`
-        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-        input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
-        select { -webkit-appearance: auto; }
-
-        /* スクロールバー：普段は非表示、スクロール中・ホバー時のみ表示 */
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; transition: background 0.3s; }
-        *:hover::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); }
-        *::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.55); }
-        * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-        *:hover { scrollbar-color: rgba(100,116,139,0.3) transparent; }
-
-        /* タブバー横スクロールバー */
-        #tab-scroll-bar::-webkit-scrollbar { height: 3px; }
-        #tab-scroll-bar::-webkit-scrollbar-thumb { background: transparent; border-radius: 10px; }
-        #tab-scroll-bar:hover::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.4); }
-      `}</style>
-    </div>
-  );
+  // 新規ユーザー → トークン生成して保存
+  var token = generateToken();
+  sheet.appendRow([token, lineUserId, new Date().toISOString()]);
+  sendWelcomeMessage(lineUserId, token);
 }
 
-    const domNode = document.getElementById('root');
-    const root = ReactDOM.createRoot(domNode);
-    root.render(React.createElement(TodoApp));
-  </script>
-</body>
-</html>
+// ============================================
+// 通知登録
+// ============================================
+function handleNotify(body) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = getOrCreateSheet(ss, SHEET_NOTIFICATIONS, ['userId', 'taskId', 'taskName', 'notifyAt']);
+  sheet.appendRow([body.userId, body.taskId, body.taskName, body.notifyAt]);
+  return ContentService.createTextOutput('ok');
+}
 
-// deploy trigger
+// ============================================
+// 通知キャンセル
+// ============================================
+function handleCancel(body) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_NOTIFICATIONS);
+  if (!sheet) return ContentService.createTextOutput('ok');
+
+  var data = sheet.getDataRange().getValues();
+  // 下から削除（行番号がずれないように）
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (data[i][0] === body.userId && data[i][1] === body.taskId) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  return ContentService.createTextOutput('ok');
+}
+
+// ============================================
+// データ同期（保存）
+// アプリ → GAS → syncシートに上書き保存
+// ============================================
+function handleSync(body) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = getOrCreateSheet(ss, SHEET_SYNC, ['userId', 'data', 'updatedAt']);
+  var data = sheet.getDataRange().getValues();
+
+  // 既存行を探して上書き
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === body.userId) {
+      sheet.getRange(i + 1, 2).setValue(body.data);
+      sheet.getRange(i + 1, 3).setValue(body.updatedAt);
+      return ContentService.createTextOutput('ok');
+    }
+  }
+
+  // 新規ユーザー → 行追加
+  sheet.appendRow([body.userId, body.data, body.updatedAt]);
+  return ContentService.createTextOutput('ok');
+}
+
+// ============================================
+// データ読込
+// GETリクエストで呼ばれ、JSONレスポンスを返す
+// ============================================
+function handleLoad(userId) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_SYNC);
+
+  if (!sheet) {
+    return jsonResponse({ data: null });
+  }
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === userId) {
+      return jsonResponse({
+        data: data[i][1],
+        updatedAt: data[i][2]
+      });
+    }
+  }
+
+  return jsonResponse({ data: null });
+}
+
+// ============================================
+// 毎分トリガー: 通知チェック＆LINE送信
+// ============================================
+function checkAndNotify() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var nSheet = ss.getSheetByName(SHEET_NOTIFICATIONS);
+  if (!nSheet) return;
+  var uSheet = ss.getSheetByName(SHEET_USERS);
+  if (!uSheet) return;
+
+  var now = new Date();
+  var notifications = nSheet.getDataRange().getValues();
+  var users = uSheet.getDataRange().getValues();
+
+  // userId → lineUserId のマップを作成
+  var userMap = {};
+  for (var j = 1; j < users.length; j++) {
+    userMap[users[j][0]] = users[j][1];
+  }
+
+  // 送信済み行を記録（後で削除）
+  var rowsToDelete = [];
+
+  for (var i = 1; i < notifications.length; i++) {
+    var userId = notifications[i][0];
+    // col B = taskId, col C = taskName, col D = notifyAt
+    var taskName = notifications[i][2];
+    var notifyAt = new Date(notifications[i][3]);
+
+    if (notifyAt <= now) {
+      var lineUserId = userMap[userId];
+      if (lineUserId) {
+        sendLineMessage(lineUserId, '🔔 ' + taskName + ' の時間です！');
+      }
+      rowsToDelete.push(i + 1);
+    }
+  }
+
+  // 送信済み行を下から削除
+  for (var k = rowsToDelete.length - 1; k >= 0; k--) {
+    nSheet.deleteRow(rowsToDelete[k]);
+  }
+}
+
+// ============================================
+// ユーティリティ関数
+// ============================================
+
+// トークン生成（10文字のランダム英数字）
+function generateToken() {
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  var token = '';
+  for (var i = 0; i < 10; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+}
+
+// ウェルカムメッセージ送信
+function sendWelcomeMessage(lineUserId, token) {
+  var url = APP_URL + '?user=' + token;
+  var message = 'ToDoアプリへようこそ！\nこのリンクからアプリを開いてね：\n' + url;
+  sendLineMessage(lineUserId, message);
+}
+
+// LINE メッセージ送信
+function sendLineMessage(lineUserId, message) {
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Bearer ' + LINE_TOKEN },
+    payload: JSON.stringify({
+      to: lineUserId,
+      messages: [{ type: 'text', text: message }]
+    })
+  });
+}
+
+// シート取得（なければヘッダー付きで作成）
+function getOrCreateSheet(ss, name, headers) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+  }
+  return sheet;
+}
+
+// JSONレスポンス作成
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
