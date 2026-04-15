@@ -9,9 +9,9 @@
   <title>ToDoリスト</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #F0F2F5; font-family: 'Noto Sans JP', sans-serif; }
@@ -99,10 +99,27 @@ function sendNotifyToGAS(task) {
   const notifyTime = new Date(task.dueDate + "T" + timeStr);
   notifyTime.setMinutes(notifyTime.getMinutes() - mins);
 
+  const payload = JSON.stringify({
+    taskName: task.text,
+    notifyTime: notifyTime.toISOString(),
+    taskId: task.id || "",
+  });
+
   fetch(GAS_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskName: task.text, notifyTime: notifyTime.toISOString() }),
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain" },
+    body: payload,
+  }).catch(() => {});
+}
+
+function cancelNotifyOnGAS(taskId) {
+  if (!taskId) return;
+  fetch(GAS_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ action: "cancel", taskId: taskId }),
   }).catch(() => {});
 }
 const ALL_TAB = "__all__";
