@@ -125,8 +125,8 @@ function cancelNotifyOnGAS(taskId) {
   }).catch(() => {});
 }
 
-// ── 変更① 追加: 設定保存をGASに送信 ──
-function sendSaveSettingsToGAS(notifyTime) {
+// 設定保存をGASに送信
+function sendSaveSettingsToGAS(settings) {
   if (!USER_ID) return;
   fetch(GAS_URL, {
     method: "POST",
@@ -135,7 +135,7 @@ function sendSaveSettingsToGAS(notifyTime) {
     body: JSON.stringify({
       action: "saveSettings",
       userId: USER_ID,
-      notifyTime: notifyTime,
+      ...settings,
     }),
   }).catch(() => {});
 }
@@ -505,87 +505,82 @@ function RefreshIcon({ spinning }) {
   );
 }
 
-/* ─── 変更② 追加: Countdown Reminder Panel ─── */
+/* ─── Countdown Reminder Panel ─── */
 function CountdownReminderPanel({ reminder, onChange }) {
   const r = reminder || { enabled: false, dailyFromDays: 7, milestone: false, dailyAll: false };
+  // ローカルstateで数字入力を管理（入力中のスナップ防止）
+  const [daysInput, setDaysInput] = useState(String(r.dailyFromDays > 0 ? r.dailyFromDays : 7));
+  useEffect(() => {
+    if (r.dailyFromDays > 0) setDaysInput(String(r.dailyFromDays));
+  }, [r.dailyFromDays]);
 
   return (
-    <div style={{
-      padding: "12px 14px",
-      backgroundColor: "var(--bg-badge)",
-      borderRadius: "0 0 12px 12px",
-      borderTop: "1px solid var(--border)",
-    }}>
+    <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
       {/* ON/OFF トグル */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        marginBottom: r.enabled ? 12 : 0,
-      }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>LINE リマインド</span>
-        <button
-          onClick={() => onChange({ ...r, enabled: !r.enabled })}
-          style={{
-            width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
-            backgroundColor: r.enabled ? ACCENT : "var(--bg-checkbox)", position: "relative",
-          }}
-        >
-          <div style={{
-            width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
-            position: "absolute", top: 3, left: r.enabled ? 23 : 3,
-            transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
-          }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: r.enabled ? 16 : 0 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>LINE リマインド</span>
+        <button onClick={() => onChange({ ...r, enabled: !r.enabled })} style={{
+          width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
+          backgroundColor: r.enabled ? ACCENT : "var(--bg-checkbox)", position: "relative",
+        }}>
+          <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: r.enabled ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
         </button>
       </div>
 
       {r.enabled && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {/* パターン1: X日前から毎日 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <input
-              type="checkbox"
-              checked={r.dailyFromDays > 0}
-              onChange={e => onChange({ ...r, dailyFromDays: e.target.checked ? 7 : 0 })}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input type="checkbox" checked={r.dailyFromDays > 0}
+              onChange={e => {
+                const on = e.target.checked;
+                const days = on ? (Math.max(1, parseInt(daysInput) || 7)) : 0;
+                if (on) setDaysInput(String(days));
+                onChange({ ...r, dailyFromDays: days });
+              }}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
             />
             {r.dailyFromDays > 0 ? (
-              <span style={{ fontSize: 13, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 14, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
                 <input
-                  type="number" min="1" max="90" value={r.dailyFromDays}
-                  onChange={e => onChange({ ...r, dailyFromDays: Math.max(1, parseInt(e.target.value) || 1) })}
+                  type="number" min="1" max="90"
+                  value={daysInput}
+                  onChange={e => setDaysInput(e.target.value)}
+                  onBlur={() => {
+                    const val = Math.max(1, parseInt(daysInput) || 1);
+                    setDaysInput(String(val));
+                    onChange({ ...r, dailyFromDays: val });
+                  }}
                   style={{
-                    width: 50, padding: "2px 6px", borderRadius: 8,
-                    border: "1px solid var(--border)", backgroundColor: "var(--bg-card)",
-                    color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit",
+                    width: 56, padding: "6px 8px", borderRadius: 8,
+                    border: "1px solid var(--border)", backgroundColor: "var(--bg-input)",
+                    color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit",
                     outline: "none", textAlign: "center",
                   }}
                 />
                 日前から毎日通知
               </span>
             ) : (
-              <span style={{ fontSize: 13, color: "var(--text-primary)" }}>X日前から毎日通知</span>
+              <span style={{ fontSize: 14, color: "var(--text-primary)" }}>X日前から毎日通知</span>
             )}
           </div>
 
           {/* パターン2: 節目通知 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={!!r.milestone}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input type="checkbox" checked={!!r.milestone}
               onChange={e => onChange({ ...r, milestone: e.target.checked })}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
             />
-            <span style={{ fontSize: 13, color: "var(--text-primary)" }}>節目通知（30・20・10日前）</span>
+            <span style={{ fontSize: 14, color: "var(--text-primary)" }}>節目通知（30・20・10日前）</span>
           </div>
 
           {/* パターン3: 毎日通知 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={!!r.dailyAll}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input type="checkbox" checked={!!r.dailyAll}
               onChange={e => onChange({ ...r, dailyAll: e.target.checked })}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
             />
-            <span style={{ fontSize: 13, color: "var(--text-primary)" }}>期日まで毎日通知</span>
+            <span style={{ fontSize: 14, color: "var(--text-primary)" }}>期日まで毎日通知</span>
           </div>
         </div>
       )}
@@ -609,14 +604,14 @@ function daysBetween(startStr, endStr) {
   return Math.ceil((e - s) / 86400000);
 }
 
-function CountdownPanel({ countdowns, onAdd, onDelete, onUpdateReminder }) {
+function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [calcOpen, setCalcOpen] = useState(false);
   const [calcStart, setCalcStart] = useState("");
   const [calcEnd, setCalcEnd] = useState("");
-  const [expandedCdId, setExpandedCdId] = useState(null);
+  const [editingCd, setEditingCd] = useState(null);
 
   const handleAdd = () => {
     if (!name.trim() || !date) return;
@@ -625,6 +620,17 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdateReminder }) {
       reminder: { enabled: false, dailyFromDays: 7, milestone: false, dailyAll: false, lastNotify: null },
     });
     setName(""); setDate(""); setAdding(false);
+  };
+
+  const openEdit = (cd) => setEditingCd({
+    ...cd,
+    reminder: { enabled: false, dailyFromDays: 7, milestone: false, dailyAll: false, lastNotify: null, ...(cd.reminder || {}) },
+  });
+
+  const saveEdit = () => {
+    if (!editingCd || !editingCd.name.trim() || !editingCd.date) return;
+    onUpdate(editingCd);
+    setEditingCd(null);
   };
 
   const calcDays = daysBetween(calcStart, calcEnd);
@@ -700,44 +706,36 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdateReminder }) {
         {countdowns.map(cd => {
           const days = daysUntil(cd.date);
           const { label, color } = cdDaysLabel(days);
-          const isExpanded = expandedCdId === cd.id;
           const hasReminder = cd.reminder && cd.reminder.enabled;
 
           return (
-            <div key={cd.id}>
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "14px 16px", backgroundColor: "var(--bg-card)",
-                borderRadius: isExpanded ? "14px 14px 0 0" : 14,
-                borderLeft: "4px solid " + color,
-                boxShadow: "var(--shadow)",
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{cd.name}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
-                    {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
-                  </div>
+            <div key={cd.id} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "14px 16px", backgroundColor: "var(--bg-card)",
+              borderRadius: 14, borderLeft: "4px solid " + color,
+              boxShadow: "var(--shadow)",
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}>
+                  {cd.name}
+                  {hasReminder && <span style={{ fontSize: 12, opacity: 0.7 }}>🔔</span>}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 22, fontWeight: 900, color }}>{label}</span>
-                  <button
-                    onClick={() => setExpandedCdId(isExpanded ? null : cd.id)}
-                    title="リマインド設定"
-                    style={{
-                      background: "none", border: "none", cursor: "pointer", padding: 4,
-                      color: hasReminder ? ACCENT : "var(--text-tertiary)",
-                      fontSize: 16, lineHeight: 1, opacity: hasReminder ? 1 : 0.5,
-                    }}
-                  >🔔</button>
-                  <button onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
+                  {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
                 </div>
               </div>
-              {isExpanded && (
-                <CountdownReminderPanel
-                  reminder={cd.reminder}
-                  onChange={r => onUpdateReminder(cd.id, r)}
-                />
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 22, fontWeight: 900, color }}>{label}</span>
+                <button
+                  onClick={() => openEdit(cd)}
+                  title="編集"
+                  style={{
+                    background: "none", border: "none", cursor: "pointer", padding: 4,
+                    color: "var(--text-tertiary)", opacity: 0.7, lineHeight: 1,
+                  }}
+                ><EditIcon /></button>
+                <button onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
+              </div>
             </div>
           );
         })}
@@ -769,6 +767,48 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdateReminder }) {
           backgroundColor: "transparent", color: "var(--text-tertiary)",
           fontSize: 13, fontWeight: 500, fontFamily: "inherit", width: "100%",
         }}>＋ 目標を追加</button>
+      )}
+
+      {/* Edit Modal */}
+      {editingCd && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingCd(null); }}
+        >
+          <div style={{ width: "100%", maxWidth: 480, backgroundColor: "var(--bg-card)", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>目標を編集</h3>
+              <button onClick={() => setEditingCd(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-tertiary)", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <input
+                value={editingCd.name}
+                onChange={e => setEditingCd({ ...editingCd, name: e.target.value })}
+                placeholder="目標名"
+                autoFocus
+                style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none" }}
+              />
+              <DateInput value={editingCd.date} onChange={d => setEditingCd({ ...editingCd, date: d })} />
+              <CountdownReminderPanel
+                reminder={editingCd.reminder}
+                onChange={r => setEditingCd({ ...editingCd, reminder: r })}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button onClick={saveEdit} disabled={!editingCd.name.trim() || !editingCd.date} style={{
+                  flex: 1, padding: "12px", borderRadius: 12, border: "none", cursor: "pointer",
+                  backgroundColor: (editingCd.name.trim() && editingCd.date) ? ACCENT : "var(--bg-badge)",
+                  color: (editingCd.name.trim() && editingCd.date) ? "#fff" : "var(--text-tertiary)",
+                  fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+                }}>保存</button>
+                <button onClick={() => setEditingCd(null)} style={{
+                  padding: "12px 20px", borderRadius: 12, border: "1px solid var(--border)",
+                  cursor: "pointer", backgroundColor: "var(--bg-card)",
+                  color: "var(--text-secondary)", fontSize: 14, fontFamily: "inherit",
+                }}>キャンセル</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1190,32 +1230,44 @@ function TodoApp() {
   const [dragOverTabId, setDragOverTabId] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
-  // ── 変更④-a 追加: LINE設定ステート ──
-  const [settingsNotifyTime, setSettingsNotifyTime] = useState("");
+  // LINE定時通知設定ステート（通知1・通知2）
+  const [settingsNotify1Time, setSettingsNotify1Time] = useState("");
+  const [settingsNotify1Enabled, setSettingsNotify1Enabled] = useState(false);
+  const [settingsNotify2Time, setSettingsNotify2Time] = useState("");
+  const [settingsNotify2Enabled, setSettingsNotify2Enabled] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   useEffect(() => {
     if (loaded) {
       const s = appData.settings || {};
-      setSettingsNotifyTime(s.notifyTime || "");
+      setSettingsNotify1Time(s.notify1Time || "");
+      setSettingsNotify1Enabled(!!s.notify1Enabled);
+      setSettingsNotify2Time(s.notify2Time || "");
+      setSettingsNotify2Enabled(!!s.notify2Enabled);
     }
   }, [loaded]);
 
-  // ── 変更④-b 追加: LINE設定・カウントダウンリマインド関数 ──
-  const handleSaveNotifyTime = () => {
+  // LINE設定保存ハンドラ
+  const handleSaveNotifySettings = () => {
+    const settings = {
+      notify1Time: settingsNotify1Time,
+      notify1Enabled: settingsNotify1Enabled,
+      notify2Time: settingsNotify2Time,
+      notify2Enabled: settingsNotify2Enabled,
+    };
     const newData = {
       ...appData,
-      settings: { ...(appData.settings || {}), notifyTime: settingsNotifyTime },
+      settings: { ...(appData.settings || {}), ...settings },
     };
     updateData(newData);
     syncNow(newData);
-    sendSaveSettingsToGAS(settingsNotifyTime);
+    sendSaveSettingsToGAS(settings);
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
   };
 
-  const handleUpdateCountdownReminder = (cdId, reminder) => {
-    const newCds = countdowns.map(c => c.id === cdId ? { ...c, reminder } : c);
+  const handleUpdateCountdown = (cd) => {
+    const newCds = countdowns.map(c => c.id === cd.id ? cd : c);
     const newData = { ...appData, countdowns: newCds };
     updateData(newData);
     syncNow(newData);
@@ -1520,8 +1572,7 @@ function TodoApp() {
       {tabs.length === 0 ? (
         <WelcomeScreen onCreateTab={createTab} />
       ) : activeTabId === COUNTDOWN_TAB ? (
-        // ── 変更④-c: CountdownPanel に onUpdateReminder を追加 ──
-        <CountdownPanel
+          <CountdownPanel
           countdowns={countdowns}
           onAdd={(cd) => {
             const newCds = [...countdowns, cd];
@@ -1535,7 +1586,7 @@ function TodoApp() {
             updateData(newData);
             syncNow(newData);
           }}
-          onUpdateReminder={handleUpdateCountdownReminder}
+          onUpdate={handleUpdateCountdown}
         />
       ) : (
         <div>
@@ -1783,34 +1834,54 @@ function TodoApp() {
           {USER_ID && (
             <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
-                LINE 通知設定
+                LINE 定時通知
               </div>
-              <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
-                  毎朝定時通知
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ flex: 1 }}>
-                    <TimeInput value={settingsNotifyTime} onChange={setSettingsNotifyTime} />
-                  </div>
+
+              {/* 通知1 */}
+              <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: settingsNotify1Enabled ? 10 : 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>通知1</span>
                   <button
-                    onClick={handleSaveNotifyTime}
-                    style={{
-                      padding: "10px 18px", borderRadius: 10, border: "none", cursor: "pointer",
-                      backgroundColor: ACCENT, color: "#fff",
-                      fontSize: 13, fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap",
-                    }}
-                  >保存</button>
+                    onClick={() => setSettingsNotify1Enabled(v => !v)}
+                    style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: settingsNotify1Enabled ? ACCENT : "var(--bg-checkbox)", position: "relative" }}
+                  >
+                    <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: settingsNotify1Enabled ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                  </button>
                 </div>
-                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
-                  期限切れ・今日が期限・緊急タスクをLINEでお知らせします
-                </p>
-                {settingsSaved && (
-                  <p style={{ fontSize: 12, color: "#22C55E", margin: "6px 0 0", fontWeight: 600 }}>✓ 保存しました</p>
+                {settingsNotify1Enabled && (
+                  <TimeInput value={settingsNotify1Time} onChange={setSettingsNotify1Time} />
                 )}
               </div>
-              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "6px 0 0", lineHeight: 1.5 }}>
-                ※ 空欄にして保存すると通知をOFFにできます
+
+              {/* 通知2 */}
+              <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: settingsNotify2Enabled ? 10 : 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>通知2</span>
+                  <button
+                    onClick={() => setSettingsNotify2Enabled(v => !v)}
+                    style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: settingsNotify2Enabled ? ACCENT : "var(--bg-checkbox)", position: "relative" }}
+                  >
+                    <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: settingsNotify2Enabled ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                  </button>
+                </div>
+                {settingsNotify2Enabled && (
+                  <TimeInput value={settingsNotify2Time} onChange={setSettingsNotify2Time} />
+                )}
+              </div>
+
+              <button
+                onClick={handleSaveNotifySettings}
+                style={{
+                  width: "100%", padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
+                  backgroundColor: ACCENT, color: "#fff",
+                  fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+                }}
+              >保存</button>
+              {settingsSaved && (
+                <p style={{ fontSize: 12, color: "#22C55E", margin: "8px 0 0", fontWeight: 600, textAlign: "center" }}>✓ 保存しました</p>
+              )}
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                期限切れ・今日が期限・緊急タスクをお知らせします。時刻は時間帯に応じて挨拶が変わります。
               </p>
             </div>
           )}
