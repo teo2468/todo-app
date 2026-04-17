@@ -125,6 +125,21 @@ function cancelNotifyOnGAS(taskId) {
   }).catch(() => {});
 }
 
+// ── 変更① 追加: 設定保存をGASに送信 ──
+function sendSaveSettingsToGAS(notifyTime) {
+  if (!USER_ID) return;
+  fetch(GAS_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({
+      action: "saveSettings",
+      userId: USER_ID,
+      notifyTime: notifyTime,
+    }),
+  }).catch(() => {});
+}
+
 const ACCENT = "#3B82F6";
 const ALL_TAB = "__all__";
 const COUNTDOWN_TAB = "__countdown__";
@@ -211,21 +226,12 @@ function doSort(tasks, key, dir) {
   });
 }
 
-// ============================================
-// useStorage
-// 変更点:
-//   - 30秒ポーリング廃止
-//   - save() にデバウンス5秒を追加
-//   - syncNow() を追加（追加・保存ボタン用の即時同期）
-//   - forcePull() を追加（クラウドから強制再読み込み）
-// ============================================
 function useStorage() {
   const [appData, setAppData] = useState({ tabs: [], countdowns: [] });
   const [loaded, setLoaded] = useState(false);
   const latestDataRef = useRef({ tabs: [], countdowns: [] });
   const debounceRef = useRef(null);
 
-  // 起動時: クラウドorローカルからデータ読み込み
   useEffect(() => {
     (async () => {
       if (USER_ID) {
@@ -243,7 +249,6 @@ function useStorage() {
           console.log("Cloud load failed, falling back to localStorage");
         }
       }
-      // フォールバック: localStorage
       try {
         const r = localStorage.getItem("todo-app-v6");
         if (r) {
@@ -256,7 +261,6 @@ function useStorage() {
     })();
   }, []);
 
-  // GASへの同期（内部関数）
   const syncToGAS = useCallback((data) => {
     if (!USER_ID) return;
     fetch(GAS_URL, {
@@ -272,8 +276,6 @@ function useStorage() {
     }).catch(() => {});
   }, []);
 
-  // localStorage保存 + デバウンス5秒でGAS同期
-  // （トグル・削除など通常の変更はここを通る）
   const save = useCallback((d) => {
     latestDataRef.current = d;
     try { localStorage.setItem("todo-app-v6", JSON.stringify(d)); } catch (e) {}
@@ -283,14 +285,11 @@ function useStorage() {
     }
   }, [syncToGAS]);
 
-  // 即時GAS同期（追加ボタン・保存ボタン用）
-  // デバウンスをキャンセルして即座に送信
   const syncNow = useCallback((d) => {
     if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     syncToGAS(d !== undefined ? d : latestDataRef.current);
   }, [syncToGAS]);
 
-  // 強制プル: GASから最新データを取得してローカルに上書き
   const forcePull = useCallback(async () => {
     if (!USER_ID) return false;
     try {
@@ -374,13 +373,6 @@ function DateInput({ value, onChange, style }) {
     else if (digits.length === 8) iso = `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`;
     if (iso) onChange(iso);
     setTyping("");
-  };
-
-  const typingDisplay = (d) => {
-    if (d.length <= 2) return d;
-    if (d.length <= 4) return d.slice(0,2) + "/" + d.slice(2);
-    if (d.length <= 6) return d.slice(0,4) + "/" + d.slice(4);
-    return d.slice(0,4) + "/" + d.slice(4,6) + "/" + d.slice(6);
   };
 
   return (
@@ -500,7 +492,6 @@ function GearIcon() {
   );
 }
 
-// 再読み込みボタン用アイコン（spinning prop で回転）
 function RefreshIcon({ spinning }) {
   return (
     <svg
@@ -514,7 +505,95 @@ function RefreshIcon({ spinning }) {
   );
 }
 
-/* ─── Countdown Panel ─── */
+/* ─── 変更② 追加: Countdown Reminder Panel ─── */
+function CountdownReminderPanel({ reminder, onChange }) {
+  const r = reminder || { enabled: false, dailyFromDays: 7, milestone: false, dailyAll: false };
+
+  return (
+    <div style={{
+      padding: "12px 14px",
+      backgroundColor: "var(--bg-badge)",
+      borderRadius: "0 0 12px 12px",
+      borderTop: "1px solid var(--border)",
+    }}>
+      {/* ON/OFF トグル */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: r.enabled ? 12 : 0,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>LINE リマインド</span>
+        <button
+          onClick={() => onChange({ ...r, enabled: !r.enabled })}
+          style={{
+            width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
+            backgroundColor: r.enabled ? ACCENT : "var(--bg-checkbox)", position: "relative",
+          }}
+        >
+          <div style={{
+            width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff",
+            position: "absolute", top: 3, left: r.enabled ? 23 : 3,
+            transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+          }} />
+        </button>
+      </div>
+
+      {r.enabled && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* パターン1: X日前から毎日 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <input
+              type="checkbox"
+              checked={r.dailyFromDays > 0}
+              onChange={e => onChange({ ...r, dailyFromDays: e.target.checked ? 7 : 0 })}
+              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+            />
+            {r.dailyFromDays > 0 ? (
+              <span style={{ fontSize: 13, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="number" min="1" max="90" value={r.dailyFromDays}
+                  onChange={e => onChange({ ...r, dailyFromDays: Math.max(1, parseInt(e.target.value) || 1) })}
+                  style={{
+                    width: 50, padding: "2px 6px", borderRadius: 8,
+                    border: "1px solid var(--border)", backgroundColor: "var(--bg-card)",
+                    color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit",
+                    outline: "none", textAlign: "center",
+                  }}
+                />
+                日前から毎日通知
+              </span>
+            ) : (
+              <span style={{ fontSize: 13, color: "var(--text-primary)" }}>X日前から毎日通知</span>
+            )}
+          </div>
+
+          {/* パターン2: 節目通知 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={!!r.milestone}
+              onChange={e => onChange({ ...r, milestone: e.target.checked })}
+              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: "var(--text-primary)" }}>節目通知（30・20・10日前）</span>
+          </div>
+
+          {/* パターン3: 毎日通知 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={!!r.dailyAll}
+              onChange={e => onChange({ ...r, dailyAll: e.target.checked })}
+              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: "var(--text-primary)" }}>期日まで毎日通知</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── 変更③ 置き換え: Countdown Panel ─── */
 function cdDaysLabel(days) {
   if (days < 0) return { label: Math.abs(days) + "日超過", color: "#EF4444" };
   if (days === 0) return { label: "今日！", color: "#22C55E" };
@@ -530,17 +609,21 @@ function daysBetween(startStr, endStr) {
   return Math.ceil((e - s) / 86400000);
 }
 
-function CountdownPanel({ countdowns, onAdd, onDelete }) {
+function CountdownPanel({ countdowns, onAdd, onDelete, onUpdateReminder }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [calcOpen, setCalcOpen] = useState(false);
   const [calcStart, setCalcStart] = useState("");
   const [calcEnd, setCalcEnd] = useState("");
+  const [expandedCdId, setExpandedCdId] = useState(null);
 
   const handleAdd = () => {
     if (!name.trim() || !date) return;
-    onAdd({ id: gid(), name: name.trim(), date });
+    onAdd({
+      id: gid(), name: name.trim(), date,
+      reminder: { enabled: false, dailyFromDays: 7, milestone: false, dailyAll: false, lastNotify: null },
+    });
     setName(""); setDate(""); setAdding(false);
   };
 
@@ -617,23 +700,44 @@ function CountdownPanel({ countdowns, onAdd, onDelete }) {
         {countdowns.map(cd => {
           const days = daysUntil(cd.date);
           const { label, color } = cdDaysLabel(days);
+          const isExpanded = expandedCdId === cd.id;
+          const hasReminder = cd.reminder && cd.reminder.enabled;
+
           return (
-            <div key={cd.id} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "14px 16px", backgroundColor: "var(--bg-card)",
-              borderRadius: 14, borderLeft: "4px solid " + color,
-              boxShadow: "var(--shadow)",
-            }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{cd.name}</div>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
-                  {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
+            <div key={cd.id}>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "14px 16px", backgroundColor: "var(--bg-card)",
+                borderRadius: isExpanded ? "14px 14px 0 0" : 14,
+                borderLeft: "4px solid " + color,
+                boxShadow: "var(--shadow)",
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{cd.name}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
+                    {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 22, fontWeight: 900, color }}>{label}</span>
+                  <button
+                    onClick={() => setExpandedCdId(isExpanded ? null : cd.id)}
+                    title="リマインド設定"
+                    style={{
+                      background: "none", border: "none", cursor: "pointer", padding: 4,
+                      color: hasReminder ? ACCENT : "var(--text-tertiary)",
+                      fontSize: 16, lineHeight: 1, opacity: hasReminder ? 1 : 0.5,
+                    }}
+                  >🔔</button>
+                  <button onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 22, fontWeight: 900, color }}>{label}</span>
-                <button onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
-              </div>
+              {isExpanded && (
+                <CountdownReminderPanel
+                  reminder={cd.reminder}
+                  onChange={r => onUpdateReminder(cd.id, r)}
+                />
+              )}
             </div>
           );
         })}
@@ -1057,14 +1161,11 @@ function WelcomeScreen({ onCreateTab }) {
 
 /* ─── Main App ─── */
 function TodoApp() {
-  // syncNow: 追加・保存ボタン押下時の即時同期
-  // forcePull: 再読み込みボタン押下時のクラウドからの強制取得
   const { appData, updateData, loaded, syncNow, forcePull } = useStorage();
   const tabs = appData.tabs || [];
   const countdowns = appData.countdowns || [];
 
   const setTabs = (newTabs) => updateData({ ...appData, tabs: newTabs });
-  const setCountdowns = (newCd) => updateData({ ...appData, countdowns: newCd });
 
   const [activeTabId, setActiveTabId] = useState(ALL_TAB);
   const [darkMode, setDarkMode] = useState(false);
@@ -1087,8 +1188,38 @@ function TodoApp() {
   const [confirmClearDone, setConfirmClearDone] = useState(false);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
-  // 再読み込みボタンのローディング状態
   const [syncing, setSyncing] = useState(false);
+
+  // ── 変更④-a 追加: LINE設定ステート ──
+  const [settingsNotifyTime, setSettingsNotifyTime] = useState("");
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  useEffect(() => {
+    if (loaded) {
+      const s = appData.settings || {};
+      setSettingsNotifyTime(s.notifyTime || "");
+    }
+  }, [loaded]);
+
+  // ── 変更④-b 追加: LINE設定・カウントダウンリマインド関数 ──
+  const handleSaveNotifyTime = () => {
+    const newData = {
+      ...appData,
+      settings: { ...(appData.settings || {}), notifyTime: settingsNotifyTime },
+    };
+    updateData(newData);
+    syncNow(newData);
+    sendSaveSettingsToGAS(settingsNotifyTime);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2000);
+  };
+
+  const handleUpdateCountdownReminder = (cdId, reminder) => {
+    const newCds = countdowns.map(c => c.id === cdId ? { ...c, reminder } : c);
+    const newData = { ...appData, countdowns: newCds };
+    updateData(newData);
+    syncNow(newData);
+  };
 
   const moveTask = (taskId, toTabId) => {
     let movedTask = null;
@@ -1155,26 +1286,20 @@ function TodoApp() {
     setTabs(arr);
   };
 
-  // ============================================================
-  // handleAddTask: 追加ボタン → syncNow で即時同期
-  // ============================================================
   const handleAddTask = () => {
     const targetTabId = isAllView ? addToTabId : activeTabId;
     if (!newTask.text.trim() || !targetTabId) return;
     const task = { id: gid(), ...newTask, text: newTask.text.trim(), done: false, createdAt: Date.now() };
     const newTabs = tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t);
     const newData = { ...appData, tabs: newTabs };
-    updateData(newData);   // localStorage保存 + デバウンス開始
-    syncNow(newData);      // デバウンスキャンセル → 即時GAS同期
+    updateData(newData);
+    syncNow(newData);
     sendNotifyToGAS(task);
     setNewTask({ ...emptyTask });
     setShowAddTask(false);
     setAddToTabId(null);
   };
 
-  // ============================================================
-  // updateTask: 保存ボタン → syncNow で即時同期
-  // ============================================================
   const updateTask = () => {
     if (!editingTask || !editingTask.text.trim()) return;
     const newTabs = tabs.map(t => ({
@@ -1182,8 +1307,8 @@ function TodoApp() {
       tasks: t.tasks.map(x => x.id === editingTask.id ? { ...editingTask } : x),
     }));
     const newData = { ...appData, tabs: newTabs };
-    updateData(newData);   // localStorage保存 + デバウンス開始
-    syncNow(newData);      // デバウンスキャンセル → 即時GAS同期
+    updateData(newData);
+    syncNow(newData);
     sendNotifyToGAS(editingTask);
     setEditingTask(null);
   };
@@ -1272,7 +1397,6 @@ function TodoApp() {
             </button>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
-            {/* 再読み込みボタン: USER_IDがある（クラウド同期中）のときのみ表示 */}
             {USER_ID && (
               <button
                 onClick={async () => {
@@ -1396,10 +1520,22 @@ function TodoApp() {
       {tabs.length === 0 ? (
         <WelcomeScreen onCreateTab={createTab} />
       ) : activeTabId === COUNTDOWN_TAB ? (
+        // ── 変更④-c: CountdownPanel に onUpdateReminder を追加 ──
         <CountdownPanel
           countdowns={countdowns}
-          onAdd={(cd) => setCountdowns([...countdowns, cd])}
-          onDelete={(id) => setCountdowns(countdowns.filter(c => c.id !== id))}
+          onAdd={(cd) => {
+            const newCds = [...countdowns, cd];
+            const newData = { ...appData, countdowns: newCds };
+            updateData(newData);
+            syncNow(newData);
+          }}
+          onDelete={(id) => {
+            const newCds = countdowns.filter(c => c.id !== id);
+            const newData = { ...appData, countdowns: newCds };
+            updateData(newData);
+            syncNow(newData);
+          }}
+          onUpdateReminder={handleUpdateCountdownReminder}
         />
       ) : (
         <div>
@@ -1629,6 +1765,7 @@ function TodoApp() {
         </div>
       </Modal>
 
+      {/* ── 変更⑤: 設定モーダル（LINE通知設定追加） ── */}
       <Modal isOpen={showSettings} onClose={() => setShowSettings(false)} title="設定">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{
@@ -1642,25 +1779,68 @@ function TodoApp() {
             </button>
           </div>
 
-          <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) }))); setShowSettings(false); }} style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
-            fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
-          }}>完了済みタスクをすべて削除</button>
+          {/* LINE 定時通知設定 */}
+          {USER_ID && (
+            <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
+                LINE 通知設定
+              </div>
+              <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
+                  毎朝定時通知
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <TimeInput value={settingsNotifyTime} onChange={setSettingsNotifyTime} />
+                  </div>
+                  <button
+                    onClick={handleSaveNotifyTime}
+                    style={{
+                      padding: "10px 18px", borderRadius: 10, border: "none", cursor: "pointer",
+                      backgroundColor: ACCENT, color: "#fff",
+                      fontSize: 13, fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap",
+                    }}
+                  >保存</button>
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                  期限切れ・今日が期限・緊急タスクをLINEでお知らせします
+                </p>
+                {settingsSaved && (
+                  <p style={{ fontSize: 12, color: "#22C55E", margin: "6px 0 0", fontWeight: 600 }}>✓ 保存しました</p>
+                )}
+              </div>
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "6px 0 0", lineHeight: 1.5 }}>
+                ※ 空欄にして保存すると通知をOFFにできます
+              </p>
+            </div>
+          )}
 
-          <button onClick={() => { setCountdowns([]); setShowSettings(false); }} style={{
-            width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
-            fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
-          }}>カウントダウンをすべて削除</button>
+          <div style={{ marginTop: 4, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>
+            <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) }))); setShowSettings(false); }} style={{
+              width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
+              backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
+              fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
+            }}>完了済みタスクをすべて削除</button>
 
-          <div style={{ marginTop: 8, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <button onClick={resetData} style={{
-              width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-              backgroundColor: "#FEF2F2", color: "#EF4444",
-              fontSize: 14, fontWeight: 700, fontFamily: "inherit",
-            }}>すべてのデータをリセット</button>
-            <p style={{ fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", marginTop: 8, marginBottom: 0 }}>タブ・タスク・カウントダウンがすべて削除されます</p>
+            <button onClick={() => {
+              const newCds = [];
+              const newData = { ...appData, countdowns: newCds };
+              updateData(newData);
+              setShowSettings(false);
+            }} style={{
+              width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
+              backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
+              fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
+            }}>カウントダウンをすべて削除</button>
+
+            <div style={{ marginTop: 8 }}>
+              <button onClick={resetData} style={{
+                width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
+                backgroundColor: "#FEF2F2", color: "#EF4444",
+                fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+              }}>すべてのデータをリセット</button>
+              <p style={{ fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", marginTop: 8, marginBottom: 0 }}>タブ・タスク・カウントダウンがすべて削除されます</p>
+            </div>
           </div>
         </div>
       </Modal>
