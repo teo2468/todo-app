@@ -86,20 +86,10 @@ const SORT_OPTIONS = [
   { key: "progress", label: "進捗" },
 ];
 
-// ============================================
-// [変更1] 新しいGAS URL（全面書き直し版）
-// ============================================
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwYyGXKQXlhusXNFYYHMcxtkJQJTHRlvT4hawOsGnZ7qKsTRMV6QpCgukL4EZJrgODVkw/exec";
 
-// ============================================
-// [変更2] URLパラメータからユーザーIDを取得
-// LINEから送られるリンク: https://...vercel.app?user=TOKEN
-// ============================================
 const USER_ID = new URLSearchParams(window.location.search).get('user') || null;
 
-// ============================================
-// [変更3] 通知登録（新GAS形式に対応）
-// ============================================
 function sendNotifyToGAS(task) {
   if (!task.notify || !task.dueDate || !USER_ID) return;
   const NOTIFY_MINUTES = {
@@ -125,9 +115,6 @@ function sendNotifyToGAS(task) {
   }).catch(() => {});
 }
 
-// ============================================
-// [変更4] 通知キャンセル（userId追加）
-// ============================================
 function cancelNotifyOnGAS(taskId) {
   if (!taskId || !USER_ID) return;
   fetch(GAS_URL, {
@@ -225,16 +212,18 @@ function doSort(tasks, key, dir) {
 }
 
 // ============================================
-// [変更5] ストレージ: GASクラウド同期対応
-// - 起動時: USER_IDがあればGASからロード
-// - 変更時: localStorageに即保存 + 変更フラグON
-// - 30秒ごと: 変更フラグがあればGASに同期
+// useStorage
+// 変更点:
+//   - 30秒ポーリング廃止
+//   - save() にデバウンス5秒を追加
+//   - syncNow() を追加（追加・保存ボタン用の即時同期）
+//   - forcePull() を追加（クラウドから強制再読み込み）
 // ============================================
 function useStorage() {
   const [appData, setAppData] = useState({ tabs: [], countdowns: [] });
   const [loaded, setLoaded] = useState(false);
-  const changedRef = useRef(false);
   const latestDataRef = useRef({ tabs: [], countdowns: [] });
+  const debounceRef = useRef(null);
 
   // 起動時: クラウドorローカルからデータ読み込み
   useEffect(() => {
@@ -262,44 +251,60 @@ function useStorage() {
           setAppData(parsed);
           latestDataRef.current = parsed;
         }
-      } catch (e) {
-        console.log("No saved data");
-      }
+      } catch (e) {}
       setLoaded(true);
     })();
   }, []);
 
-  // 30秒ごとに変更があればGASに同期
-  useEffect(() => {
+  // GASへの同期（内部関数）
+  const syncToGAS = useCallback((data) => {
     if (!USER_ID) return;
-    const timer = setInterval(() => {
-      if (!changedRef.current) return;
-      changedRef.current = false;
-      fetch(GAS_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({
-          action: "sync",
-          userId: USER_ID,
-          data: JSON.stringify(latestDataRef.current),
-          updatedAt: new Date().toISOString(),
-        }),
-      }).catch(() => {});
-    }, 30000);
-    return () => clearInterval(timer);
+    fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({
+        action: "sync",
+        userId: USER_ID,
+        data: JSON.stringify(data),
+        updatedAt: new Date().toISOString(),
+      }),
+    }).catch(() => {});
   }, []);
 
-  const save = useCallback(async (d) => {
+  // localStorage保存 + デバウンス5秒でGAS同期
+  // （トグル・削除など通常の変更はここを通る）
+  const save = useCallback((d) => {
     latestDataRef.current = d;
-    // localStorageにキャッシュ（即時）
-    try {
-      localStorage.setItem("todo-app-v6", JSON.stringify(d));
-    } catch (e) {
-      console.error("Save failed");
+    try { localStorage.setItem("todo-app-v6", JSON.stringify(d)); } catch (e) {}
+    if (USER_ID) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => { syncToGAS(d); }, 5000);
     }
-    // GASへの同期は30秒タイマーに任せる
-    if (USER_ID) changedRef.current = true;
+  }, [syncToGAS]);
+
+  // 即時GAS同期（追加ボタン・保存ボタン用）
+  // デバウンスをキャンセルして即座に送信
+  const syncNow = useCallback((d) => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    syncToGAS(d !== undefined ? d : latestDataRef.current);
+  }, [syncToGAS]);
+
+  // 強制プル: GASから最新データを取得してローカルに上書き
+  const forcePull = useCallback(async () => {
+    if (!USER_ID) return false;
+    try {
+      const res = await fetch(`${GAS_URL}?action=load&userId=${USER_ID}`);
+      const json = await res.json();
+      if (json.data) {
+        const parsed = JSON.parse(json.data);
+        setAppData(parsed);
+        latestDataRef.current = parsed;
+        try { localStorage.setItem("todo-app-v6", JSON.stringify(parsed)); } catch (e) {}
+        return true;
+      }
+    } catch (e) {}
+    return false;
   }, []);
 
   const updateData = useCallback((d) => {
@@ -307,7 +312,7 @@ function useStorage() {
     save(d);
   }, [save]);
 
-  return { appData, updateData, loaded };
+  return { appData, updateData, loaded, syncNow, forcePull };
 }
 
 /* ─── Small Components ─── */
@@ -491,6 +496,20 @@ function GearIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+// 再読み込みボタン用アイコン（spinning prop で回転）
+function RefreshIcon({ spinning }) {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={spinning ? { animation: "spin 0.8s linear infinite", display: "block" } : { display: "block" }}
+    >
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 .49-3.47" />
     </svg>
   );
 }
@@ -1038,7 +1057,9 @@ function WelcomeScreen({ onCreateTab }) {
 
 /* ─── Main App ─── */
 function TodoApp() {
-  const { appData, updateData, loaded } = useStorage();
+  // syncNow: 追加・保存ボタン押下時の即時同期
+  // forcePull: 再読み込みボタン押下時のクラウドからの強制取得
+  const { appData, updateData, loaded, syncNow, forcePull } = useStorage();
   const tabs = appData.tabs || [];
   const countdowns = appData.countdowns || [];
 
@@ -1066,6 +1087,8 @@ function TodoApp() {
   const [confirmClearDone, setConfirmClearDone] = useState(false);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
+  // 再読み込みボタンのローディング状態
+  const [syncing, setSyncing] = useState(false);
 
   const moveTask = (taskId, toTabId) => {
     let movedTask = null;
@@ -1132,23 +1155,35 @@ function TodoApp() {
     setTabs(arr);
   };
 
+  // ============================================================
+  // handleAddTask: 追加ボタン → syncNow で即時同期
+  // ============================================================
   const handleAddTask = () => {
     const targetTabId = isAllView ? addToTabId : activeTabId;
     if (!newTask.text.trim() || !targetTabId) return;
     const task = { id: gid(), ...newTask, text: newTask.text.trim(), done: false, createdAt: Date.now() };
-    setTabs(tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t));
+    const newTabs = tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t);
+    const newData = { ...appData, tabs: newTabs };
+    updateData(newData);   // localStorage保存 + デバウンス開始
+    syncNow(newData);      // デバウンスキャンセル → 即時GAS同期
     sendNotifyToGAS(task);
     setNewTask({ ...emptyTask });
     setShowAddTask(false);
     setAddToTabId(null);
   };
 
+  // ============================================================
+  // updateTask: 保存ボタン → syncNow で即時同期
+  // ============================================================
   const updateTask = () => {
     if (!editingTask || !editingTask.text.trim()) return;
-    setTabs(tabs.map(t => ({
+    const newTabs = tabs.map(t => ({
       ...t,
       tasks: t.tasks.map(x => x.id === editingTask.id ? { ...editingTask } : x),
-    })));
+    }));
+    const newData = { ...appData, tabs: newTabs };
+    updateData(newData);   // localStorage保存 + デバウンス開始
+    syncNow(newData);      // デバウンスキャンセル → 即時GAS同期
     sendNotifyToGAS(editingTask);
     setEditingTask(null);
   };
@@ -1237,6 +1272,27 @@ function TodoApp() {
             </button>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
+            {/* 再読み込みボタン: USER_IDがある（クラウド同期中）のときのみ表示 */}
+            {USER_ID && (
+              <button
+                onClick={async () => {
+                  setSyncing(true);
+                  await forcePull();
+                  setSyncing(false);
+                }}
+                disabled={syncing}
+                title="クラウドから再読み込み"
+                style={{
+                  width: 36, height: 36, borderRadius: 10, border: "none",
+                  cursor: syncing ? "default" : "pointer",
+                  backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  opacity: syncing ? 0.6 : 1,
+                }}
+              >
+                <RefreshIcon spinning={syncing} />
+              </button>
+            )}
             <button onClick={() => setDarkMode(!darkMode)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -1648,6 +1704,7 @@ function TodoApp() {
 
       <style>{`
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         input::placeholder, textarea::placeholder { color: var(--text-tertiary); }
         select { -webkit-appearance: auto; }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
