@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).send('Method Not Allowed');
   }
 
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwElDA_KxO0_IpXaZCzgZHcGKpUvf-ee802X66nP0v42_DLa94TTlFkI5NFpuixeZW9hw/exec';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzCuAXEMR2e3kSppkIFS4OsnaxA9WrYVTyakGHxfmKf35r68niNj4zWQzaBjVlIgxLw/exec';
 
   // fetchを先に開始（まだawaitしない）
   const gasPromise = fetch(GAS_URL, {
