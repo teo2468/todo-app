@@ -536,7 +536,8 @@ function CountdownReminderPanel({ reminder, onChange }) {
                 const on = e.target.checked;
                 const days = on ? (Math.max(1, parseInt(daysInput) || 7)) : 0;
                 if (on) setDaysInput(String(days));
-                onChange({ ...r, dailyFromDays: days });
+                // dailyAll と相互排他
+                onChange({ ...r, dailyFromDays: days, dailyAll: false });
               }}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
             />
@@ -568,7 +569,7 @@ function CountdownReminderPanel({ reminder, onChange }) {
           {/* パターン2: 節目通知 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input type="checkbox" checked={!!r.milestone}
-              onChange={e => onChange({ ...r, milestone: e.target.checked })}
+              onChange={e => onChange({ ...r, milestone: e.target.checked, dailyAll: false })}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
             />
             <span style={{ fontSize: 14, color: "var(--text-primary)" }}>節目通知（30・20・10日前）</span>
@@ -577,7 +578,14 @@ function CountdownReminderPanel({ reminder, onChange }) {
           {/* パターン3: 毎日通知 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input type="checkbox" checked={!!r.dailyAll}
-              onChange={e => onChange({ ...r, dailyAll: e.target.checked })}
+              onChange={e => {
+                if (e.target.checked) {
+                  // dailyAll をON → 他2つをリセット
+                  onChange({ ...r, dailyAll: true, dailyFromDays: 0, milestone: false });
+                } else {
+                  onChange({ ...r, dailyAll: false });
+                }
+              }}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
             />
             <span style={{ fontSize: 14, color: "var(--text-primary)" }}>期日まで毎日通知</span>
@@ -772,10 +780,10 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
       {/* Edit Modal */}
       {editingCd && (
         <div
-          style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}
           onClick={(e) => { if (e.target === e.currentTarget) setEditingCd(null); }}
         >
-          <div style={{ width: "100%", maxWidth: 480, backgroundColor: "var(--bg-card)", borderRadius: "20px 20px 0 0", padding: "20px 20px 40px", maxHeight: "85vh", overflowY: "auto" }}>
+          <div style={{ width: "min(90vw, 420px)", backgroundColor: "var(--bg-card)", borderRadius: 20, padding: "24px 24px 28px", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>目標を編集</h3>
               <button onClick={() => setEditingCd(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-tertiary)", lineHeight: 1 }}>✕</button>
