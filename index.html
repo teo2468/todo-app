@@ -86,7 +86,7 @@ const SORT_OPTIONS = [
   { key: "progress", label: "進捗" },
 ];
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx2I4SczhacK0icagq39dG6Wx934i7OhDrJw9duhocwJ0JBYdcQsLyJYB0h8t8JxkN38A/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyd1QsM4Zcw3AqqU0n62yRDLOxbnz5F3n5h-i3l3dM-BuJZbO35sUNLA_pZRSxx4Iv8YA/exec";
 
 const USER_ID = new URLSearchParams(window.location.search).get('user') || null;
 
@@ -125,7 +125,6 @@ function cancelNotifyOnGAS(taskId) {
   }).catch(() => {});
 }
 
-// 設定保存をGASに送信
 function sendSaveSettingsToGAS(settings) {
   if (!USER_ID) return;
   fetch(GAS_URL, {
@@ -314,7 +313,6 @@ function useStorage() {
   return { appData, updateData, loaded, syncNow, forcePull };
 }
 
-/* ─── Small Components ─── */
 function TimeInput({ value, onChange }) {
   const [raw, setRaw] = useState(value || "");
   useEffect(() => { setRaw(value || ""); }, [value]);
@@ -505,10 +503,8 @@ function RefreshIcon({ spinning }) {
   );
 }
 
-/* ─── Countdown Reminder Panel ─── */
 function CountdownReminderPanel({ reminder, onChange }) {
   const r = reminder || { enabled: false, dailyFromDays: 7, milestone: false, dailyAll: false };
-  // ローカルstateで数字入力を管理（入力中のスナップ防止）
   const [daysInput, setDaysInput] = useState(String(r.dailyFromDays > 0 ? r.dailyFromDays : 7));
   useEffect(() => {
     if (r.dailyFromDays > 0) setDaysInput(String(r.dailyFromDays));
@@ -516,7 +512,6 @@ function CountdownReminderPanel({ reminder, onChange }) {
 
   return (
     <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
-      {/* ON/OFF トグル */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: r.enabled ? 16 : 0 }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>LINE リマインド</span>
         <button onClick={() => onChange({ ...r, enabled: !r.enabled })} style={{
@@ -529,14 +524,12 @@ function CountdownReminderPanel({ reminder, onChange }) {
 
       {r.enabled && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* パターン1: X日前から毎日 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input type="checkbox" checked={r.dailyFromDays > 0}
               onChange={e => {
                 const on = e.target.checked;
                 const days = on ? (Math.max(1, parseInt(daysInput) || 7)) : 0;
                 if (on) setDaysInput(String(days));
-                // dailyAll と相互排他
                 onChange({ ...r, dailyFromDays: days, dailyAll: false });
               }}
               style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
@@ -566,7 +559,6 @@ function CountdownReminderPanel({ reminder, onChange }) {
             )}
           </div>
 
-          {/* パターン2: 節目通知 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input type="checkbox" checked={!!r.milestone}
               onChange={e => onChange({ ...r, milestone: e.target.checked, dailyAll: false })}
@@ -575,12 +567,10 @@ function CountdownReminderPanel({ reminder, onChange }) {
             <span style={{ fontSize: 14, color: "var(--text-primary)" }}>節目通知（30・20・10日前）</span>
           </div>
 
-          {/* パターン3: 毎日通知 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input type="checkbox" checked={!!r.dailyAll}
               onChange={e => {
                 if (e.target.checked) {
-                  // dailyAll をON → 他2つをリセット
                   onChange({ ...r, dailyAll: true, dailyFromDays: 0, milestone: false });
                 } else {
                   onChange({ ...r, dailyAll: false });
@@ -596,7 +586,6 @@ function CountdownReminderPanel({ reminder, onChange }) {
   );
 }
 
-/* ─── 変更③ 置き換え: Countdown Panel ─── */
 function cdDaysLabel(days) {
   if (days < 0) return { label: Math.abs(days) + "日超過", color: "#EF4444" };
   if (days === 0) return { label: "今日！", color: "#22C55E" };
@@ -777,7 +766,6 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
         }}>＋ 目標を追加</button>
       )}
 
-      {/* Edit Modal */}
       {editingCd && (
         <div
           style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}
@@ -822,7 +810,6 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   );
 }
 
-/* ─── Task Item ─── */
 function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabName }) {
   const ts = tabStyle || { main: "#64748B", bg: "#F1F5F9" };
   const isRepeat = task.repeat && task.repeat !== "none";
@@ -847,7 +834,6 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabN
       opacity: task.done ? 0.45 : 1, position: "relative",
       transition: "background 0.3s",
     }}>
-
       <button onClick={() => onToggle(task.id)} style={{
         width: 24, height: 24, minWidth: 24, borderRadius: 8, border: "none",
         cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
@@ -929,7 +915,6 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabN
   );
 }
 
-/* ─── Repeat Detail ─── */
 function RepeatDetail({ task, setTask }) {
   const r = task.repeat;
   const toggleDay = (i) => {
@@ -1018,7 +1003,6 @@ function RepeatDetail({ task, setTask }) {
   );
 }
 
-/* ─── Task Form ─── */
 function TaskForm({ task, setTask, onSubmit, submitLabel }) {
   const isRepeat = task.repeat && task.repeat !== "none";
   const timeRef = useRef(null);
@@ -1161,7 +1145,6 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
   );
 }
 
-/* ─── Welcome ─── */
 function WelcomeScreen({ onCreateTab }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(TAB_COLORS[0].value);
@@ -1207,7 +1190,6 @@ function WelcomeScreen({ onCreateTab }) {
   );
 }
 
-/* ─── Main App ─── */
 function TodoApp() {
   const { appData, updateData, loaded, syncNow, forcePull } = useStorage();
   const tabs = appData.tabs || [];
@@ -1238,7 +1220,6 @@ function TodoApp() {
   const [dragOverTabId, setDragOverTabId] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
-  // LINE定時通知設定ステート（通知1・通知2）
   const [settingsNotify1Time, setSettingsNotify1Time] = useState("");
   const [settingsNotify1Enabled, setSettingsNotify1Enabled] = useState(false);
   const [settingsNotify2Time, setSettingsNotify2Time] = useState("");
@@ -1255,7 +1236,6 @@ function TodoApp() {
     }
   }, [loaded]);
 
-  // LINE設定保存ハンドラ
   const handleSaveNotifySettings = () => {
     const settings = {
       notify1Time: settingsNotify1Time,
@@ -1436,7 +1416,6 @@ function TodoApp() {
   return (
     <div style={{ ...themeVars, minHeight: "100vh", backgroundColor: "var(--bg-main)", fontFamily: "'Noto Sans JP','Hiragino Sans',sans-serif" }}>
 
-      {/* ─── Header ─── */}
       <div style={{ backgroundColor: "var(--bg-header)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100, boxShadow: "var(--shadow)" }}>
         <div style={{ padding: "16px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1486,7 +1465,6 @@ function TodoApp() {
           </div>
         </div>
 
-        {/* Tab bar */}
         {tabs.length > 0 && (
           <div
             id="tab-scroll-bar"
@@ -1576,11 +1554,10 @@ function TodoApp() {
         )}
       </div>
 
-      {/* ─── Body ─── */}
       {tabs.length === 0 ? (
         <WelcomeScreen onCreateTab={createTab} />
       ) : activeTabId === COUNTDOWN_TAB ? (
-          <CountdownPanel
+        <CountdownPanel
           countdowns={countdowns}
           onAdd={(cd) => {
             const newCds = [...countdowns, cd];
@@ -1681,7 +1658,6 @@ function TodoApp() {
         </div>
       )}
 
-      {/* FAB */}
       {tabs.length > 0 && !isCountdownView && (
         <button onClick={() => {
           if (isAllView && tabs.length === 1) {
@@ -1705,7 +1681,6 @@ function TodoApp() {
         </button>
       )}
 
-      {/* ─── Modals ─── */}
       <Modal isOpen={showAddTask} onClose={() => { setShowAddTask(false); setAddToTabId(null); }} title="タスクを追加"
         footer={addToTabId ? (
           <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
@@ -1824,7 +1799,6 @@ function TodoApp() {
         </div>
       </Modal>
 
-      {/* ── 変更⑤: 設定モーダル（LINE通知設定追加） ── */}
       <Modal isOpen={showSettings} onClose={() => setShowSettings(false)} title="設定">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{
@@ -1838,14 +1812,12 @@ function TodoApp() {
             </button>
           </div>
 
-          {/* LINE 定時通知設定 */}
           {USER_ID && (
             <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
                 LINE 定時通知
               </div>
 
-              {/* 通知1 */}
               <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: settingsNotify1Enabled ? 10 : 0 }}>
                   <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>通知1</span>
@@ -1861,7 +1833,6 @@ function TodoApp() {
                 )}
               </div>
 
-              {/* 通知2 */}
               <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: settingsNotify2Enabled ? 10 : 0 }}>
                   <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>通知2</span>
