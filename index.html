@@ -205,6 +205,99 @@ function getRepeatLabel(task) {
 
 const SORT_DEFAULTS = { priority: "asc", progress: "desc", dueDate: "asc", created: "desc" };
 
+function computeNextOccurrence(task, baseTs) {
+  const base = new Date(baseTs || Date.now());
+  const r = task.repeat;
+
+  const next = new Date(base);
+  next.setDate(next.getDate() + 1);
+  next.setHours(0, 0, 0, 0);
+
+  if (r === "daily") return next.getTime();
+
+  if (r === "weekdays") {
+    while (next.getDay() === 0 || next.getDay() === 6) {
+      next.setDate(next.getDate() + 1);
+    }
+    return next.getTime();
+  }
+
+  if (r === "weekly") {
+    const days = (task.repeatDays || []).slice().sort((a, b) => a - b);
+    if (days.length === 0) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + 7);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+    for (let i = 0; i < 8; i++) {
+      if (days.indexOf(next.getDay()) !== -1) return next.getTime();
+      next.setDate(next.getDate() + 1);
+    }
+    return next.getTime();
+  }
+
+  if (r === "monthly") {
+    const d = new Date(base);
+    if (task.monthMode === "weekday") {
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      const ord = task.monthOrdinal || 1;
+      const wd = task.monthWeekday != null ? task.monthWeekday : 0;
+      if (ord > 0) {
+        while (d.getDay() !== wd) d.setDate(d.getDate() + 1);
+        d.setDate(d.getDate() + (ord - 1) * 7);
+      } else {
+        d.setMonth(d.getMonth() + 1);
+        d.setDate(0);
+        while (d.getDay() !== wd) d.setDate(d.getDate() - 1);
+      }
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    }
+    d.setDate(1);
+    d.setMonth(d.getMonth() + 1);
+    const targetDay = task.repeatMonthDay || 1;
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(targetDay, lastDay));
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  if (r === "custom") {
+    const iv = Math.max(1, task.customInterval || 1);
+    const unit = task.customUnit || "day";
+    const d = new Date(base);
+    d.setHours(0, 0, 0, 0);
+    if (unit === "day") d.setDate(d.getDate() + iv);
+    else if (unit === "week") d.setDate(d.getDate() + iv * 7);
+    else if (unit === "month") d.setMonth(d.getMonth() + iv);
+    return d.getTime();
+  }
+
+  return next.getTime();
+}
+
+function resetRepeatTasks(appData) {
+  const now = Date.now();
+  let changed = false;
+  const newTabs = (appData.tabs || []).map(tab => {
+    const newTasks = tab.tasks.map(task => {
+      if (!task.done) return task;
+      if (!task.repeat || task.repeat === "none") return task;
+      if (!task.lastCompletedAt) return task;
+      const nextAt = computeNextOccurrence(task, task.lastCompletedAt);
+      if (nextAt <= now) {
+        changed = true;
+        return { ...task, done: false, progress: 0, lastCompletedAt: null };
+      }
+      return task;
+    });
+    return { ...tab, tasks: newTasks };
+  });
+  return changed ? { ...appData, tabs: newTabs } : appData;
+}
+
 function doSort(tasks, key, dir) {
   const d = dir === "desc" ? -1 : 1;
   return [...tasks].sort((a, b) => {
@@ -228,6 +321,7 @@ function doSort(tasks, key, dir) {
 function useStorage() {
   const [appData, setAppData] = useState({ tabs: [], countdowns: [] });
   const [loaded, setLoaded] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState(null);
   const latestDataRef = useRef({ tabs: [], countdowns: [] });
   const debounceRef = useRef(null);
 
@@ -273,6 +367,7 @@ function useStorage() {
         updatedAt: new Date().toISOString(),
       }),
     }).catch(() => {});
+    setLastSyncAt(Date.now());
   }, []);
 
   const save = useCallback((d) => {
@@ -310,7 +405,16 @@ function useStorage() {
     save(d);
   }, [save]);
 
-  return { appData, updateData, loaded, syncNow, forcePull };
+  return { appData, updateData, loaded, syncNow, forcePull, lastSyncAt };
+}
+
+function timeAgo(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  if (diff < 60000) return "たった今";
+  if (diff < 3600000) return Math.floor(diff / 60000) + "分前";
+  if (diff < 86400000) return Math.floor(diff / 3600000) + "時間前";
+  return Math.floor(diff / 86400000) + "日前";
 }
 
 function TimeInput({ value, onChange }) {
@@ -435,7 +539,7 @@ function Modal({ isOpen, onClose, title, children, footer }) {
         <div style={{ padding: "24px 24px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{title}</h3>
           <button onClick={onClose} style={{
-            width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+            width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer",
             backgroundColor: "var(--bg-badge)", color: "var(--text-tertiary)",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
           }}>✕</button>
@@ -525,16 +629,30 @@ function CountdownReminderPanel({ reminder, onChange }) {
       {r.enabled && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="checkbox" checked={r.dailyFromDays > 0}
+            <input type="checkbox" checked={!!r.dailyAll}
+              onChange={e => {
+                if (e.target.checked) {
+                  onChange({ ...r, dailyAll: true, dailyFromDays: 0, milestone: false });
+                } else {
+                  onChange({ ...r, dailyAll: false });
+                }
+              }}
+              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 14, color: "var(--text-primary)" }}>期日まで毎日通知</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, opacity: r.dailyAll ? 0.4 : 1 }}>
+            <input type="checkbox" checked={r.dailyFromDays > 0} disabled={r.dailyAll}
               onChange={e => {
                 const on = e.target.checked;
                 const days = on ? (Math.max(1, parseInt(daysInput) || 7)) : 0;
                 if (on) setDaysInput(String(days));
                 onChange({ ...r, dailyFromDays: days, dailyAll: false });
               }}
-              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: r.dailyAll ? "not-allowed" : "pointer", flexShrink: 0 }}
             />
-            {r.dailyFromDays > 0 ? (
+            {r.dailyFromDays > 0 && !r.dailyAll ? (
               <span style={{ fontSize: 14, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
                 <input
                   type="number" min="1" max="90"
@@ -559,26 +677,12 @@ function CountdownReminderPanel({ reminder, onChange }) {
             )}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="checkbox" checked={!!r.milestone}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, opacity: r.dailyAll ? 0.4 : 1 }}>
+            <input type="checkbox" checked={!!r.milestone} disabled={r.dailyAll}
               onChange={e => onChange({ ...r, milestone: e.target.checked, dailyAll: false })}
-              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: r.dailyAll ? "not-allowed" : "pointer", flexShrink: 0 }}
             />
-            <span style={{ fontSize: 14, color: "var(--text-primary)" }}>節目通知（30・20・10日前）</span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="checkbox" checked={!!r.dailyAll}
-              onChange={e => {
-                if (e.target.checked) {
-                  onChange({ ...r, dailyAll: true, dailyFromDays: 0, milestone: false });
-                } else {
-                  onChange({ ...r, dailyAll: false });
-                }
-              }}
-              style={{ accentColor: ACCENT, width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
-            />
-            <span style={{ fontSize: 14, color: "var(--text-primary)" }}>期日まで毎日通知</span>
+            <span style={{ fontSize: 14, color: "var(--text-primary)" }}>節目通知（30・20・10・7日前）</span>
           </div>
         </div>
       )}
@@ -601,13 +705,75 @@ function daysBetween(startStr, endStr) {
   return Math.ceil((e - s) / 86400000);
 }
 
+function DateCalculator() {
+  const [calcStart, setCalcStart] = useState("");
+  const [calcEnd, setCalcEnd] = useState("");
+  const calcDays = daysBetween(calcStart, calcEnd);
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4 }}>開始日</div>
+          <DateInput value={calcStart} onChange={setCalcStart} />
+        </div>
+        <div style={{ paddingTop: 22, fontSize: 18, color: "var(--text-tertiary)", fontWeight: 300 }}>→</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>終了日</div>
+            <button onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
+              background: "none", border: "none", cursor: "pointer", padding: "2px 4px",
+              color: "var(--text-tertiary)", fontSize: 13, lineHeight: 1,
+            }} title="入れ替え">⇔</button>
+          </div>
+          <DateInput value={calcEnd} onChange={setCalcEnd} />
+        </div>
+      </div>
+
+      {calcDays !== null && (
+        <div style={{
+          marginTop: 14, padding: "14px 16px", borderRadius: 12,
+          backgroundColor: calcDays < 0 ? "#FEE2E2" : calcDays === 0 ? "#DCFCE7" : "var(--bg-badge)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+            {calcStart && calcEnd
+              ? new Date(calcStart + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
+                + " 〜 "
+                + new Date(calcEnd + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
+              : ""}
+          </span>
+          <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "#EF4444" : calcDays === 0 ? "#22C55E" : ACCENT }}>
+            {calcDays < 0 ? calcDays + "日" : calcDays === 0 ? "同じ日" : calcDays + "日間"}
+          </span>
+        </div>
+      )}
+      <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "10px 0 0", lineHeight: 1.5 }}>
+        開始日と終了日の間の日数を計算します。終了日が過去の日付だとマイナスで表示されます。
+      </p>
+    </div>
+  );
+}
+
+function CalcIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="12" x2="10" y2="12" />
+      <line x1="13" y1="12" x2="13.01" y2="12" />
+      <line x1="16" y1="12" x2="16.01" y2="12" />
+      <line x1="8" y1="16" x2="10" y2="16" />
+      <line x1="13" y1="16" x2="13.01" y2="16" />
+      <line x1="16" y1="16" x2="16.01" y2="16" />
+    </svg>
+  );
+}
+
 function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
-  const [calcOpen, setCalcOpen] = useState(false);
-  const [calcStart, setCalcStart] = useState("");
-  const [calcEnd, setCalcEnd] = useState("");
   const [editingCd, setEditingCd] = useState(null);
 
   const handleAdd = () => {
@@ -630,71 +796,8 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
     setEditingCd(null);
   };
 
-  const calcDays = daysBetween(calcStart, calcEnd);
-
-  const sectionHead = (title) => (
-    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, marginTop: 18 }}>{title}</div>
-  );
-
   return (
     <div style={{ padding: "16px 20px 100px" }}>
-      <div style={{ backgroundColor: "var(--bg-card)", borderRadius: 14, boxShadow: "var(--shadow)", overflow: "hidden", marginTop: 4 }}>
-        <button onClick={() => setCalcOpen(!calcOpen)} style={{
-          width: "100%", padding: "14px 16px", border: "none", cursor: "pointer",
-          backgroundColor: "transparent", display: "flex", justifyContent: "space-between",
-          alignItems: "center", fontFamily: "inherit",
-        }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>日数計算</span>
-          <span style={{
-            fontSize: 11, color: "var(--text-tertiary)",
-            transform: calcOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s",
-          }}>▼</span>
-        </button>
-
-        {calcOpen && (
-          <div style={{ padding: "0 16px 16px", borderTop: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4 }}>開始日</div>
-                <DateInput value={calcStart} onChange={setCalcStart} />
-              </div>
-              <div style={{ paddingTop: 18, fontSize: 18, color: "var(--text-tertiary)", fontWeight: 300 }}>→</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>終了日</div>
-                  <button onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
-                    background: "none", border: "none", cursor: "pointer", padding: "2px 4px",
-                    color: "var(--text-tertiary)", fontSize: 13, lineHeight: 1,
-                  }} title="入れ替え">⇔</button>
-                </div>
-                <DateInput value={calcEnd} onChange={setCalcEnd} />
-              </div>
-            </div>
-
-            {calcDays !== null && (
-              <div style={{
-                marginTop: 10, padding: "14px 16px", borderRadius: 12,
-                backgroundColor: calcDays < 0 ? "#FEE2E2" : calcDays === 0 ? "#DCFCE7" : "var(--bg-badge)",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-              }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
-                  {calcStart && calcEnd
-                    ? new Date(calcStart + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
-                      + " 〜 "
-                      + new Date(calcEnd + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
-                    : ""}
-                </span>
-                <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "#EF4444" : calcDays === 0 ? "#22C55E" : ACCENT }}>
-                  {calcDays < 0 ? calcDays + "日" : calcDays === 0 ? "同じ日" : calcDays + "日間"}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {sectionHead("カウントダウン")}
-
       {countdowns.length === 0 && !adding && (
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "0 0 12px" }}>目標日を追加して残り日数を確認</p>
       )}
@@ -835,7 +938,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabN
       transition: "background 0.3s",
     }}>
       <button onClick={() => onToggle(task.id)} style={{
-        width: 24, height: 24, minWidth: 24, borderRadius: 8, border: "none",
+        width: 28, height: 28, minWidth: 28, borderRadius: 8, border: "none",
         cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
         display: "flex", alignItems: "center", justifyContent: "center",
         marginTop: 1, position: "relative", zIndex: 1,
@@ -900,14 +1003,14 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabN
 
       <div style={{ display: "flex", gap: 4, marginTop: 1, position: "relative", zIndex: 1 }}>
         {onMove && (
-          <button onClick={() => onMove(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>
+          <button onClick={() => onMove(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8, color: "var(--text-tertiary)", opacity: 0.7 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         )}
-        <button onClick={() => onEdit(task)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>
+        <button onClick={() => onEdit(task)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8, color: "var(--text-tertiary)", opacity: 0.7 }}>
           <EditIcon />
         </button>
-        <button onClick={() => onDelete(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.7 }}>
+        <button onClick={() => onDelete(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8, color: "var(--text-tertiary)", opacity: 0.7 }}>
           <TrashIcon />
         </button>
       </div>
@@ -1145,7 +1248,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
   );
 }
 
-function WelcomeScreen({ onCreateTab }) {
+function WelcomeScreen({ onCreateTab, onQuickAdd }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(TAB_COLORS[0].value);
   const suggestions = ["仕事", "買い物", "プライベート", "勉強", "健康", "趣味"];
@@ -1156,7 +1259,19 @@ function WelcomeScreen({ onCreateTab }) {
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
       </div>
       <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリストへようこそ</h2>
-      <p style={{ margin: "0 0 24px", fontSize: 14, color: "var(--text-secondary)" }}>最初のタブを作成して始めましょう。</p>
+      <p style={{ margin: "0 0 24px", fontSize: 14, color: "var(--text-secondary)" }}>タブを作って始めるか、まずはタスクを追加しましょう。</p>
+
+      <button onClick={onQuickAdd}
+        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: ACCENT, color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit", marginBottom: 10 }}>
+        ＋ タスクを追加
+      </button>
+      <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 22px" }}>タブを作らずに「すべて」に追加します</p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 0 18px" }}>
+        <div style={{ flex: 1, height: 1, backgroundColor: "var(--border)" }} />
+        <span style={{ fontSize: 11, color: "var(--text-tertiary)", fontWeight: 600 }}>または</span>
+        <div style={{ flex: 1, height: 1, backgroundColor: "var(--border)" }} />
+      </div>
 
       <input value={name} onChange={e => setName(e.target.value)} placeholder="タブ名を入力"
         onKeyDown={e => { if (e.key === "Enter" && name.trim()) { onCreateTab(name.trim(), color); setName(""); } }}
@@ -1176,7 +1291,7 @@ function WelcomeScreen({ onCreateTab }) {
 
       <button onClick={() => { if (name.trim()) { onCreateTab(name.trim(), color); setName(""); } }}
         disabled={!name.trim()}
-        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: name.trim() ? ACCENT : "var(--bg-badge)", color: name.trim() ? "#fff" : "var(--text-tertiary)", fontSize: 15, fontWeight: 700, fontFamily: "inherit", marginBottom: 28 }}>
+        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: name.trim() ? "pointer" : "default", backgroundColor: name.trim() ? color : "var(--bg-badge)", color: name.trim() ? "#fff" : "var(--text-tertiary)", fontSize: 15, fontWeight: 700, fontFamily: "inherit", marginBottom: 28 }}>
         タブを作成
       </button>
 
@@ -1191,14 +1306,33 @@ function WelcomeScreen({ onCreateTab }) {
 }
 
 function TodoApp() {
-  const { appData, updateData, loaded, syncNow, forcePull } = useStorage();
+  const { appData, updateData, loaded, syncNow, forcePull, lastSyncAt } = useStorage();
+  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    const t = setInterval(() => setNowTick(n => n + 1), 30000);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+      clearInterval(t);
+    };
+  }, []);
   const tabs = appData.tabs || [];
   const countdowns = appData.countdowns || [];
 
   const setTabs = (newTabs) => updateData({ ...appData, tabs: newTabs });
 
   const [activeTabId, setActiveTabId] = useState(ALL_TAB);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem("todo-app-dark") === "1"; } catch (e) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("todo-app-dark", darkMode ? "1" : "0"); } catch (e) {}
+  }, [darkMode]);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddTab, setShowAddTab] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -1219,6 +1353,9 @@ function TodoApp() {
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
+  const [undoData, setUndoData] = useState(null);
+  const undoTimerRef = useRef(null);
 
   const [settingsNotify1Time, setSettingsNotify1Time] = useState("");
   const [settingsNotify1Enabled, setSettingsNotify1Enabled] = useState(false);
@@ -1234,6 +1371,24 @@ function TodoApp() {
       setSettingsNotify2Time(s.notify2Time || "");
       setSettingsNotify2Enabled(!!s.notify2Enabled);
     }
+  }, [loaded]);
+
+  const appDataRef = useRef(appData);
+  useEffect(() => { appDataRef.current = appData; }, [appData]);
+  useEffect(() => {
+    if (!loaded) return;
+    const check = () => {
+      const updated = resetRepeatTasks(appDataRef.current);
+      if (updated !== appDataRef.current) {
+        updateData(updated);
+        syncNow(updated);
+      }
+    };
+    check();
+    const t = setInterval(check, 5 * 60 * 1000);
+    const onFocus = () => check();
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(t); window.removeEventListener("focus", onFocus); };
   }, [loaded]);
 
   const handleSaveNotifySettings = () => {
@@ -1349,20 +1504,64 @@ function TodoApp() {
     const newData = { ...appData, tabs: newTabs };
     updateData(newData);
     syncNow(newData);
-    sendNotifyToGAS(editingTask);
+    cancelNotifyOnGAS(editingTask.id);
+    if (!editingTask.done) sendNotifyToGAS(editingTask);
     setEditingTask(null);
   };
 
   const toggleTask = (id) => {
-    setTabs(tabs.map(t => ({
+    let toggled = null;
+    const newTabs = tabs.map(t => ({
       ...t,
-      tasks: t.tasks.map(x => x.id === id ? { ...x, done: !x.done } : x),
-    })));
+      tasks: t.tasks.map(x => {
+        if (x.id === id) {
+          const newDone = !x.done;
+          const u = { ...x, done: newDone };
+          if (x.repeat && x.repeat !== "none") {
+            u.lastCompletedAt = newDone ? Date.now() : null;
+          }
+          toggled = u;
+          return u;
+        }
+        return x;
+      }),
+    }));
+    setTabs(newTabs);
+    if (toggled) {
+      if (toggled.done) cancelNotifyOnGAS(id);
+      else sendNotifyToGAS(toggled);
+    }
   };
 
   const deleteTask = (id) => {
+    let removedTask = null;
+    let fromTabId = null;
+    const newTabs = tabs.map(t => {
+      const found = t.tasks.find(x => x.id === id);
+      if (found) { removedTask = found; fromTabId = t.id; return { ...t, tasks: t.tasks.filter(x => x.id !== id) }; }
+      return t;
+    });
+    setTabs(newTabs);
     cancelNotifyOnGAS(id);
-    setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => x.id !== id) })));
+    if (removedTask) {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoData({ task: removedTask, tabId: fromTabId });
+      undoTimerRef.current = setTimeout(() => {
+        setUndoData(null);
+        undoTimerRef.current = null;
+      }, 5000);
+    }
+  };
+
+  const undoDelete = () => {
+    if (!undoData) return;
+    const { task, tabId } = undoData;
+    const targetTabId = tabs.find(t => t.id === tabId) ? tabId : (tabs[0] && tabs[0].id);
+    if (!targetTabId) { setUndoData(null); return; }
+    setTabs(tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t));
+    if (!task.done) sendNotifyToGAS(task);
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+    setUndoData(null);
   };
 
   const clearDone = () => {
@@ -1374,6 +1573,16 @@ function TodoApp() {
   };
 
   const resetData = async () => {
+    if (USER_ID) {
+      try {
+        await fetch(GAS_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ action: "resetData", userId: USER_ID }),
+        });
+      } catch (e) {}
+    }
     try { localStorage.removeItem("todo-app-v6"); } catch (e) {}
     window.location.reload();
   };
@@ -1422,7 +1631,24 @@ function TodoApp() {
             <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: ACCENT, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <AppIcon />
             </div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリスト</h1>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリスト</h1>
+              {USER_ID && (!online || lastSyncAt) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: online ? "var(--text-tertiary)" : "#EF4444", fontWeight: 600 }}>
+                  {!online ? (
+                    <>
+                      <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
+                      <span>オフライン</span>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E" }} />
+                      <span>保存済み {timeAgo(lastSyncAt)}</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             <button onClick={() => setActiveTabId(activeTabId === COUNTDOWN_TAB ? ALL_TAB : COUNTDOWN_TAB)} style={{
               padding: "5px 10px", borderRadius: 10, border: "none", cursor: "pointer",
               backgroundColor: activeTabId === COUNTDOWN_TAB ? "#F97316" : "var(--bg-badge)",
@@ -1446,7 +1672,7 @@ function TodoApp() {
                 disabled={syncing}
                 title="クラウドから再読み込み"
                 style={{
-                  width: 36, height: 36, borderRadius: 10, border: "none",
+                  width: 40, height: 40, borderRadius: 10, border: "none",
                   cursor: syncing ? "default" : "pointer",
                   backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -1456,10 +1682,13 @@ function TodoApp() {
                 <RefreshIcon spinning={syncing} />
               </button>
             )}
-            <button onClick={() => setDarkMode(!darkMode)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setShowCalc(true)} title="日数計算" style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <CalcIcon />
+            </button>
+            <button onClick={() => setDarkMode(!darkMode)} style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
-            <button onClick={() => setShowSettings(true)} style={{ width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setShowSettings(true)} style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <GearIcon />
             </button>
           </div>
@@ -1555,7 +1784,17 @@ function TodoApp() {
       </div>
 
       {tabs.length === 0 ? (
-        <WelcomeScreen onCreateTab={createTab} />
+        <WelcomeScreen
+          onCreateTab={createTab}
+          onQuickAdd={() => {
+            const defaultTab = { id: gid(), name: "タスク", color: TAB_COLORS[0].value, tasks: [] };
+            setTabs([defaultTab]);
+            setActiveTabId(ALL_TAB);
+            setAddToTabId(defaultTab.id);
+            setNewTask({ ...emptyTask });
+            setShowAddTask(true);
+          }}
+        />
       ) : activeTabId === COUNTDOWN_TAB ? (
         <CountdownPanel
           countdowns={countdowns}
@@ -1681,6 +1920,26 @@ function TodoApp() {
         </button>
       )}
 
+      {undoData && (
+        <div style={{
+          position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
+          backgroundColor: "var(--text-primary)", color: "var(--bg-card)",
+          padding: "12px 16px", borderRadius: 14,
+          display: "flex", alignItems: "center", gap: 14,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.3)", zIndex: 60,
+          fontSize: 14, maxWidth: "calc(100vw - 32px)",
+        }}>
+          <span style={{ fontWeight: 500, opacity: 0.9 }}>
+            「{undoData.task.text.length > 16 ? undoData.task.text.slice(0, 16) + "…" : undoData.task.text}」を削除
+          </span>
+          <button onClick={undoDelete} style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "#60A5FA", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+            padding: "4px 8px",
+          }}>元に戻す</button>
+        </div>
+      )}
+
       <Modal isOpen={showAddTask} onClose={() => { setShowAddTask(false); setAddToTabId(null); }} title="タスクを追加"
         footer={addToTabId ? (
           <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
@@ -1797,6 +2056,10 @@ function TodoApp() {
           <button onClick={() => setDelTabId(null)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "1px solid var(--border)", cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: "inherit" }}>キャンセル</button>
           <button onClick={() => deleteTab(delTabId)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
         </div>
+      </Modal>
+
+      <Modal isOpen={showCalc} onClose={() => setShowCalc(false)} title="日数計算">
+        <DateCalculator />
       </Modal>
 
       <Modal isOpen={showSettings} onClose={() => setShowSettings(false)} title="設定">
