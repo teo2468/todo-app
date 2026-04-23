@@ -930,7 +930,14 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   );
 }
 
-function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName }) {
+const TASK_SIZES = {
+  small:  { padY: 5,  padX: 13, font: 13, checkSize: 24, badgeFont: 10, memoFont: 11, iconFont: 40 },
+  medium: { padY: 8,  padX: 16, font: 15, checkSize: 28, badgeFont: 11, memoFont: 13, iconFont: 56 },
+  large:  { padY: 12, padX: 18, font: 18, checkSize: 34, badgeFont: 13, memoFont: 15, iconFont: 64 },
+};
+
+function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onReorderDragStart, onReorderDragOver, onReorderDrop, onReorderDragEnd, isDragging, isDragOver, taskSize }) {
+  const sz = TASK_SIZES[taskSize] || TASK_SIZES.medium;
   const ts = tabStyle || { main: "#64748B", bg: "#F1F5F9" };
   const isRepeat = task.repeat && task.repeat !== "none";
   const progress = task.progress || 0;
@@ -947,42 +954,94 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName }) {
     : "var(--bg-card)";
 
   const [swipeX, setSwipeX] = useState(0);
+  const [dragMode, setDragMode] = useState(false); // mobile long-press drag
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
-  const touchMoved = useRef(false);
+  const gestureMode = useRef(null); // null | "swipe" | "drag"
+  const longPressTimer = useRef(null);
+
+  const startLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      if (gestureMode.current == null) {
+        gestureMode.current = "drag";
+        setDragMode(true);
+        onReorderDragStart && onReorderDragStart(task.id);
+        if (navigator.vibrate) navigator.vibrate(15);
+      }
+      longPressTimer.current = null;
+    }, 400);
+  };
+  const cancelLongPress = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  };
 
   const onTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
-    touchMoved.current = false;
+    gestureMode.current = null;
+    startLongPress();
   };
   const onTouchMove = (e) => {
     if (touchStartX.current == null) return;
-    const dx = e.touches[0].clientX - touchStartX.current;
-    const dy = e.touches[0].clientY - touchStartY.current;
-    if (!touchMoved.current && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
-      touchMoved.current = true;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartX.current;
+    const dy = t.clientY - touchStartY.current;
+
+    if (gestureMode.current === "drag") {
+      e.preventDefault();
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const taskEl = el && el.closest && el.closest("[data-task-id]");
+      if (taskEl) {
+        const overId = taskEl.getAttribute("data-task-id");
+        if (overId && overId !== task.id) onReorderDragOver && onReorderDragOver(overId);
+      }
+      return;
     }
-    if (touchMoved.current) setSwipeX(Math.max(-120, Math.min(0, dx)));
+
+    if (gestureMode.current == null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+      cancelLongPress();
+      if (Math.abs(dx) > Math.abs(dy)) {
+        gestureMode.current = "swipe";
+      } else {
+        gestureMode.current = "scroll";
+      }
+    }
+    if (gestureMode.current === "swipe") setSwipeX(Math.max(-120, Math.min(0, dx)));
   };
   const onTouchEnd = () => {
-    if (swipeX <= -80) {
+    cancelLongPress();
+    if (gestureMode.current === "drag") {
+      onReorderDrop && onReorderDrop();
+      setDragMode(false);
+    } else if (gestureMode.current === "swipe" && swipeX <= -80) {
       setSwipeX(0);
       onDelete(task.id);
-    } else {
+    } else if (gestureMode.current === "swipe") {
       setSwipeX(0);
     }
     touchStartX.current = null;
     touchStartY.current = null;
+    gestureMode.current = null;
   };
 
-  const handleCardClick = (e) => {
-    if (touchMoved.current) { touchMoved.current = false; return; }
+  const handleCardClick = () => {
+    if (dragMode) return;
     onEdit(task);
   };
 
   return (
-    <div style={{ position: "relative", marginBottom: 4, borderRadius: 16, overflow: "hidden" }}>
+    <div
+      data-task-id={task.id}
+      draggable
+      onDragStart={(e) => { onReorderDragStart && onReorderDragStart(task.id); try { e.dataTransfer.effectAllowed = "move"; } catch (_) {} }}
+      onDragOver={(e) => { e.preventDefault(); onReorderDragOver && onReorderDragOver(task.id); }}
+      onDrop={(e) => { e.preventDefault(); onReorderDrop && onReorderDrop(); }}
+      onDragEnd={() => onReorderDragEnd && onReorderDragEnd()}
+      style={{ position: "relative", marginBottom: 4, borderRadius: 16, overflow: "hidden", opacity: isDragging ? 0.4 : 1, transform: dragMode ? "scale(1.02)" : "scale(1)", transition: "opacity 0.15s, transform 0.15s", boxShadow: dragMode ? "0 8px 24px rgba(0,0,0,0.2)" : "none" }}>
+      {isDragOver && (
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, backgroundColor: ACCENT, borderRadius: 2, zIndex: 3 }} />
+      )}
       <div style={{
         position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "flex-end",
         paddingRight: 20, backgroundColor: "#EF4444", color: "#fff",
@@ -994,16 +1053,17 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName }) {
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{
-          display: "flex", alignItems: "flex-start", gap: 14, padding: "8px 16px",
+          display: "flex", alignItems: "flex-start", gap: 14, padding: sz.padY + "px " + sz.padX + "px",
           background: cardBg, borderRadius: 16,
           borderLeft: "3px solid " + ts.main,
           opacity: task.done ? 0.45 : 1, position: "relative",
           transition: swipeX === 0 ? "background 0.3s, transform 0.2s" : "none",
           transform: "translateX(" + swipeX + "px)",
           cursor: "pointer",
+          userSelect: "none", WebkitUserSelect: "none", touchAction: "pan-y",
         }}>
         <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }} style={{
-          width: 28, height: 28, minWidth: 28, borderRadius: 8, border: "none",
+          width: sz.checkSize, height: sz.checkSize, minWidth: sz.checkSize, borderRadius: 8, border: "none",
           cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
           display: "flex", alignItems: "center", justifyContent: "center",
           marginTop: 1, position: "relative", zIndex: 1,
@@ -1016,38 +1076,38 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName }) {
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
             {!isRepeat && priObj && priObj.key !== "none" && (
               <span style={{
-                display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11,
+                display: "inline-flex", alignItems: "center", gap: 3, fontSize: sz.badgeFont,
                 fontWeight: 700, color: priObj.color, backgroundColor: priObj.bg,
                 padding: "2px 8px", borderRadius: 6, marginRight: 4,
               }}>{priObj.icon} {priObj.label}</span>
             )}
             <span style={{
-              fontSize: 15, lineHeight: 1.5, color: "var(--text-primary)", fontWeight: 500,
+              fontSize: sz.font, lineHeight: 1.5, color: "var(--text-primary)", fontWeight: 500,
               textDecoration: task.done ? "line-through" : "none", wordBreak: "break-word",
             }}>{task.text}</span>
           </div>
 
           {task.memo && (
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
+            <p style={{ margin: "4px 0 0", fontSize: sz.memoFont, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
             {showTabName && task._tabName && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
             )}
             {!task.done && progress > 0 && (
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
+                fontSize: sz.badgeFont, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
                 color: progress === 100 ? "#15803D" : ts.main,
                 backgroundColor: progress === 100 ? "#DCFCE7" : ts.main + "22",
               }}>{progress}%</span>
             )}
             {rl && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#14B8A6", backgroundColor: "#CCFBF1", padding: "2px 8px", borderRadius: 6 }}>{rl}</span>
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "#14B8A6", backgroundColor: "#CCFBF1", padding: "2px 8px", borderRadius: 6 }}>{rl}</span>
             )}
             {task.dueDate && (
               <span style={{
-                fontSize: 11, fontWeight: 600,
+                fontSize: sz.badgeFont, fontWeight: 600,
                 color: overdue ? "#EF4444" : "var(--text-tertiary)",
                 backgroundColor: overdue ? "#FEE2E2" : "var(--bg-badge)",
                 padding: "2px 8px", borderRadius: 6,
@@ -1056,10 +1116,10 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName }) {
               </span>
             )}
             {!task.dueDate && task.dueTime && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>{task.dueTime}</span>
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>{task.dueTime}</span>
             )}
             {task.notify && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
                 {"🔔 " + ((NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming) || {}).label || "")}
               </span>
             )}
@@ -1404,6 +1464,8 @@ function TodoApp() {
   const [confirmClearDone, setConfirmClearDone] = useState(false);
   const [dragTabId, setDragTabId] = useState(null);
   const [dragOverTabId, setDragOverTabId] = useState(null);
+  const [dragTaskId, setDragTaskId] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -1483,16 +1545,19 @@ function TodoApp() {
     setMovingTaskId(null);
   };
 
-  const moveTaskInTab = (taskId, delta) => {
+  const handleTaskReorder = (fromId, toId) => {
+    if (!fromId || !toId || fromId === toId) return;
+    if (sortKey !== "order") {
+      setSortKey("order");
+      setSortDir(SORT_DEFAULTS["order"]);
+    }
     setTabs(tabs.map(t => {
-      const idx = t.tasks.findIndex(x => x.id === taskId);
-      if (idx === -1) return t;
-      const newIdx = idx + delta;
-      if (newIdx < 0 || newIdx >= t.tasks.length) return t;
+      const fromIdx = t.tasks.findIndex(x => x.id === fromId);
+      const toIdx = t.tasks.findIndex(x => x.id === toId);
+      if (fromIdx === -1 || toIdx === -1) return t;
       const newTasks = [...t.tasks];
-      const tmp = newTasks[idx];
-      newTasks[idx] = newTasks[newIdx];
-      newTasks[newIdx] = tmp;
+      const [item] = newTasks.splice(fromIdx, 1);
+      newTasks.splice(toIdx, 0, item);
       return { ...t, tasks: newTasks };
     }));
   };
@@ -1997,6 +2062,16 @@ function TodoApp() {
                   onDelete={deleteTask}
                   onEdit={setEditingTask}
                   showTabName={isAllView}
+                  taskSize={(appData.settings && appData.settings.taskSize) || "medium"}
+                  onReorderDragStart={(id) => setDragTaskId(id)}
+                  onReorderDragOver={(id) => setDragOverTaskId(id)}
+                  onReorderDrop={() => {
+                    if (dragTaskId && dragOverTaskId) handleTaskReorder(dragTaskId, dragOverTaskId);
+                    setDragTaskId(null); setDragOverTaskId(null);
+                  }}
+                  onReorderDragEnd={() => { setDragTaskId(null); setDragOverTaskId(null); }}
+                  isDragging={dragTaskId === task.id}
+                  isDragOver={dragOverTaskId === task.id && dragTaskId !== task.id}
                 />
               );
             })}
@@ -2092,16 +2167,6 @@ function TodoApp() {
           <>
             <TaskForm task={editingTask} setTask={setEditingTask} onSubmit={updateTask} submitLabel="保存" />
             <div style={{ marginTop: 8, paddingTop: 16, borderTop: "1px solid var(--border)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <button onClick={() => moveTaskInTab(editingTask.id, -1)} style={{
-                padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
-                cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
-                fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-              }}>↑ 上へ</button>
-              <button onClick={() => moveTaskInTab(editingTask.id, 1)} style={{
-                padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
-                cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
-                fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-              }}>↓ 下へ</button>
               {tabs.length > 1 && (
                 <button onClick={() => { const id = editingTask.id; setEditingTask(null); setMovingTaskId(id); }} style={{
                   padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
@@ -2260,6 +2325,35 @@ function TodoApp() {
               style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: darkMode ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
               <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: darkMode ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
             </button>
+          </div>
+
+          <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 10 }}>タスクの大きさ</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+              {[
+                { key: "small", label: "小" },
+                { key: "medium", label: "中" },
+                { key: "large", label: "大" },
+              ].map(opt => {
+                const current = (appData.settings && appData.settings.taskSize) || "medium";
+                const sel = current === opt.key;
+                return (
+                  <button key={opt.key}
+                    onClick={() => {
+                      const newData = { ...appData, settings: { ...(appData.settings || {}), taskSize: opt.key } };
+                      updateData(newData);
+                      syncNow(newData);
+                    }}
+                    style={{
+                      padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
+                      backgroundColor: sel ? ACCENT : "var(--bg-card)",
+                      color: sel ? "#fff" : "var(--text-secondary)",
+                      fontSize: opt.key === "small" ? 12 : opt.key === "large" ? 16 : 14,
+                      fontWeight: 700, fontFamily: "inherit",
+                    }}>{opt.label}</button>
+                );
+              })}
+            </div>
           </div>
 
           {USER_ID && (
