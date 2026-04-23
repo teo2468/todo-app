@@ -80,6 +80,7 @@ const NOTIFY_OPTIONS = [
 ];
 
 const SORT_OPTIONS = [
+  { key: "order", label: "順番" },
   { key: "created", label: "作成順" },
   { key: "dueDate", label: "期限" },
   { key: "priority", label: "優先度" },
@@ -203,7 +204,7 @@ function getRepeatLabel(task) {
   return null;
 }
 
-const SORT_DEFAULTS = { priority: "asc", progress: "desc", dueDate: "asc", created: "desc" };
+const SORT_DEFAULTS = { order: "asc", priority: "asc", progress: "desc", dueDate: "asc", created: "desc" };
 
 function computeNextOccurrence(task, baseTs) {
   const base = new Date(baseTs || Date.now());
@@ -300,6 +301,13 @@ function resetRepeatTasks(appData) {
 
 function doSort(tasks, key, dir) {
   const d = dir === "desc" ? -1 : 1;
+  if (key === "order") {
+    // 配列順を保持（undone を上に）。dirが desc なら逆順
+    const undone = tasks.filter(t => !t.done);
+    const done = tasks.filter(t => t.done);
+    const body = d === 1 ? undone : [...undone].reverse();
+    return body.concat(done);
+  }
   return [...tasks].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     if (key === "priority") {
@@ -755,6 +763,15 @@ function DateCalculator() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
 function CalcIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -913,7 +930,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   );
 }
 
-function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabName }) {
+function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName }) {
   const ts = tabStyle || { main: "#64748B", bg: "#F1F5F9" };
   const isRepeat = task.repeat && task.repeat !== "none";
   const progress = task.progress || 0;
@@ -929,90 +946,125 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, onMove, showTabN
     ? `linear-gradient(to right, ${fillColor} ${progress}%, var(--bg-card) ${progress}%)`
     : "var(--bg-card)";
 
+  const [swipeX, setSwipeX] = useState(0);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const touchMoved = useRef(false);
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchMoved.current = false;
+  };
+  const onTouchMove = (e) => {
+    if (touchStartX.current == null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (!touchMoved.current && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+      touchMoved.current = true;
+    }
+    if (touchMoved.current) setSwipeX(Math.max(-120, Math.min(0, dx)));
+  };
+  const onTouchEnd = () => {
+    if (swipeX <= -80) {
+      setSwipeX(0);
+      onDelete(task.id);
+    } else {
+      setSwipeX(0);
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
+  const handleCardClick = (e) => {
+    if (touchMoved.current) { touchMoved.current = false; return; }
+    onEdit(task);
+  };
+
   return (
-    <div style={{
-      display: "flex", alignItems: "flex-start", gap: 14, padding: "8px 16px",
-      background: cardBg, borderRadius: 16, marginBottom: 4,
-      borderLeft: "3px solid " + ts.main,
-      opacity: task.done ? 0.45 : 1, position: "relative",
-      transition: "background 0.3s",
-    }}>
-      <button onClick={() => onToggle(task.id)} style={{
-        width: 28, height: 28, minWidth: 28, borderRadius: 8, border: "none",
-        cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        marginTop: 1, position: "relative", zIndex: 1,
-        boxShadow: task.done ? "0 2px 8px " + ts.main + "40" : "inset 0 1px 3px rgba(0,0,0,0.1)",
-      }}>
-        {task.done && <CheckIcon />}
-      </button>
-
-      <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-          {!isRepeat && priObj && priObj.key !== "none" && (
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11,
-              fontWeight: 700, color: priObj.color, backgroundColor: priObj.bg,
-              padding: "2px 8px", borderRadius: 6, marginRight: 4,
-            }}>{priObj.icon} {priObj.label}</span>
-          )}
-          <span style={{
-            fontSize: 15, lineHeight: 1.5, color: "var(--text-primary)", fontWeight: 500,
-            textDecoration: task.done ? "line-through" : "none", wordBreak: "break-word",
-          }}>{task.text}</span>
-        </div>
-
-        {task.memo && (
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-          {showTabName && task._tabName && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
-          )}
-          {!task.done && (
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
-              color: progress === 100 ? "#15803D" : progress > 0 ? ts.main : "var(--text-tertiary)",
-              backgroundColor: progress === 100 ? "#DCFCE7" : progress > 0 ? ts.main + "22" : "var(--bg-badge)",
-            }}>{progress}%</span>
-          )}
-          {rl && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#14B8A6", backgroundColor: "#CCFBF1", padding: "2px 8px", borderRadius: 6 }}>{rl}</span>
-          )}
-          {task.dueDate && (
-            <span style={{
-              fontSize: 11, fontWeight: 600,
-              color: overdue ? "#EF4444" : "var(--text-tertiary)",
-              backgroundColor: overdue ? "#FEE2E2" : "var(--bg-badge)",
-              padding: "2px 8px", borderRadius: 6,
-            }}>
-              {"📅 " + new Date(task.dueDate).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }) + (task.dueTime ? " " + task.dueTime : "")}
-            </span>
-          )}
-          {!task.dueDate && task.dueTime && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>{task.dueTime}</span>
-          )}
-          {task.notify && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
-              {"通知 " + ((NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming) || {}).label || "")}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 4, marginTop: 1, position: "relative", zIndex: 1 }}>
-        {onMove && (
-          <button onClick={() => onMove(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8, color: "var(--text-tertiary)", opacity: 0.7 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        )}
-        <button onClick={() => onEdit(task)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8, color: "var(--text-tertiary)", opacity: 0.7 }}>
-          <EditIcon />
+    <div style={{ position: "relative", marginBottom: 4, borderRadius: 16, overflow: "hidden" }}>
+      <div style={{
+        position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "flex-end",
+        paddingRight: 20, backgroundColor: "#EF4444", color: "#fff",
+        fontSize: 13, fontWeight: 700,
+      }}>削除</div>
+      <div
+        onClick={handleCardClick}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          display: "flex", alignItems: "flex-start", gap: 14, padding: "8px 16px",
+          background: cardBg, borderRadius: 16,
+          borderLeft: "3px solid " + ts.main,
+          opacity: task.done ? 0.45 : 1, position: "relative",
+          transition: swipeX === 0 ? "background 0.3s, transform 0.2s" : "none",
+          transform: "translateX(" + swipeX + "px)",
+          cursor: "pointer",
+        }}>
+        <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }} style={{
+          width: 28, height: 28, minWidth: 28, borderRadius: 8, border: "none",
+          cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          marginTop: 1, position: "relative", zIndex: 1,
+          boxShadow: task.done ? "0 2px 8px " + ts.main + "40" : "inset 0 1px 3px rgba(0,0,0,0.1)",
+        }}>
+          {task.done && <CheckIcon />}
         </button>
-        <button onClick={() => onDelete(task.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8, color: "var(--text-tertiary)", opacity: 0.7 }}>
-          <TrashIcon />
-        </button>
+
+        <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+            {!isRepeat && priObj && priObj.key !== "none" && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11,
+                fontWeight: 700, color: priObj.color, backgroundColor: priObj.bg,
+                padding: "2px 8px", borderRadius: 6, marginRight: 4,
+              }}>{priObj.icon} {priObj.label}</span>
+            )}
+            <span style={{
+              fontSize: 15, lineHeight: 1.5, color: "var(--text-primary)", fontWeight: 500,
+              textDecoration: task.done ? "line-through" : "none", wordBreak: "break-word",
+            }}>{task.text}</span>
+          </div>
+
+          {task.memo && (
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+            {showTabName && task._tabName && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
+            )}
+            {!task.done && progress > 0 && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
+                color: progress === 100 ? "#15803D" : ts.main,
+                backgroundColor: progress === 100 ? "#DCFCE7" : ts.main + "22",
+              }}>{progress}%</span>
+            )}
+            {rl && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#14B8A6", backgroundColor: "#CCFBF1", padding: "2px 8px", borderRadius: 6 }}>{rl}</span>
+            )}
+            {task.dueDate && (
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                color: overdue ? "#EF4444" : "var(--text-tertiary)",
+                backgroundColor: overdue ? "#FEE2E2" : "var(--bg-badge)",
+                padding: "2px 8px", borderRadius: 6,
+              }}>
+                {"📅 " + new Date(task.dueDate).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }) + (task.dueTime ? " " + task.dueTime : "")}
+              </span>
+            )}
+            {!task.dueDate && task.dueTime && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>{task.dueTime}</span>
+            )}
+            {task.notify && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
+                {"🔔 " + ((NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming) || {}).label || "")}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1122,7 +1174,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
   const handleRepeatChange = (e) => {
     const v = e.target.value;
     const next = { ...task, repeat: v };
-    if (v !== "none") next.priority = "none";
+    if (v !== "none") { next.priority = "none"; next.dueDate = ""; }
     if (v === "weekdays") next.repeatDays = [1, 2, 3, 4, 5];
     if (v === "weekly") next.repeatDays = next.repeatDays || [];
     if (v === "monthly") {
@@ -1354,6 +1406,8 @@ function TodoApp() {
   const [dragOverTabId, setDragOverTabId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [undoData, setUndoData] = useState(null);
   const undoTimerRef = useRef(null);
 
@@ -1429,6 +1483,20 @@ function TodoApp() {
     setMovingTaskId(null);
   };
 
+  const moveTaskInTab = (taskId, delta) => {
+    setTabs(tabs.map(t => {
+      const idx = t.tasks.findIndex(x => x.id === taskId);
+      if (idx === -1) return t;
+      const newIdx = idx + delta;
+      if (newIdx < 0 || newIdx >= t.tasks.length) return t;
+      const newTasks = [...t.tasks];
+      const tmp = newTasks[idx];
+      newTasks[idx] = newTasks[newIdx];
+      newTasks[newIdx] = tmp;
+      return { ...t, tasks: newTasks };
+    }));
+  };
+
   const isAllView = activeTabId === ALL_TAB;
   const isCountdownView = activeTabId === COUNTDOWN_TAB;
   const activeTab = tabs.find(t => t.id === activeTabId);
@@ -1448,10 +1516,20 @@ function TodoApp() {
   };
 
   const deleteTab = (id) => {
+    const idx = tabs.findIndex(t => t.id === id);
+    const removedTab = tabs[idx];
     const remaining = tabs.filter(t => t.id !== id);
     setTabs(remaining);
     if (activeTabId === id) setActiveTabId(ALL_TAB);
     setDelTabId(null);
+    if (removedTab) {
+      (removedTab.tasks || []).forEach(t => cancelNotifyOnGAS(t.id));
+      const taskCount = (removedTab.tasks || []).length;
+      showUndo(
+        { type: "tab", tab: removedTab, index: idx },
+        "タブ「" + removedTab.name + "」を削除" + (taskCount ? "（" + taskCount + "件）" : "")
+      );
+    }
   };
 
   const startEditTab = (tab) => {
@@ -1533,6 +1611,15 @@ function TodoApp() {
     }
   };
 
+  const showUndo = (payload, label) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoData({ payload, label });
+    undoTimerRef.current = setTimeout(() => {
+      setUndoData(null);
+      undoTimerRef.current = null;
+    }, 5000);
+  };
+
   const deleteTask = (id) => {
     let removedTask = null;
     let fromTabId = null;
@@ -1544,31 +1631,48 @@ function TodoApp() {
     setTabs(newTabs);
     cancelNotifyOnGAS(id);
     if (removedTask) {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-      setUndoData({ task: removedTask, tabId: fromTabId });
-      undoTimerRef.current = setTimeout(() => {
-        setUndoData(null);
-        undoTimerRef.current = null;
-      }, 5000);
+      const name = removedTask.text.length > 16 ? removedTask.text.slice(0, 16) + "…" : removedTask.text;
+      showUndo({ type: "task", task: removedTask, tabId: fromTabId }, "「" + name + "」を削除");
     }
   };
 
   const undoDelete = () => {
     if (!undoData) return;
-    const { task, tabId } = undoData;
-    const targetTabId = tabs.find(t => t.id === tabId) ? tabId : (tabs[0] && tabs[0].id);
-    if (!targetTabId) { setUndoData(null); return; }
-    setTabs(tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t));
-    if (!task.done) sendNotifyToGAS(task);
+    const p = undoData.payload;
+    if (p.type === "task") {
+      const targetTabId = tabs.find(t => t.id === p.tabId) ? p.tabId : (tabs[0] && tabs[0].id);
+      if (targetTabId) {
+        setTabs(tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, p.task] } : t));
+        if (!p.task.done) sendNotifyToGAS(p.task);
+      }
+    } else if (p.type === "tab") {
+      const newTabs = [...tabs];
+      newTabs.splice(Math.min(p.index, newTabs.length), 0, p.tab);
+      setTabs(newTabs);
+      (p.tab.tasks || []).forEach(t => { if (!t.done && t.notify) sendNotifyToGAS(t); });
+    } else if (p.type === "tasks") {
+      setTabs(tabs.map(t => {
+        const addBack = p.items.filter(it => it.tabId === t.id).map(it => it.task);
+        return addBack.length ? { ...t, tasks: [...t.tasks, ...addBack] } : t;
+      }));
+    }
     if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
     setUndoData(null);
   };
 
   const clearDone = () => {
-    if (isAllView) {
-      setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) })));
-    } else {
-      setTabs(tabs.map(t => t.id === activeTabId ? { ...t, tasks: t.tasks.filter(x => !x.done) } : t));
+    const removed = [];
+    const scopeCheck = (t) => isAllView || t.id === activeTabId;
+    const newTabs = tabs.map(t => {
+      if (!scopeCheck(t)) return t;
+      t.tasks.forEach(task => {
+        if (task.done) removed.push({ task, tabId: t.id });
+      });
+      return { ...t, tasks: t.tasks.filter(x => !x.done) };
+    });
+    setTabs(newTabs);
+    if (removed.length) {
+      showUndo({ type: "tasks", items: removed }, "完了済み " + removed.length + "件を削除");
     }
   };
 
@@ -1682,6 +1786,9 @@ function TodoApp() {
                 <RefreshIcon spinning={syncing} />
               </button>
             )}
+            <button onClick={() => { setShowSearch(true); setSearchQuery(""); }} title="検索" style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <SearchIcon />
+            </button>
             <button onClick={() => setShowCalc(true)} title="日数計算" style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <CalcIcon />
             </button>
@@ -1695,9 +1802,10 @@ function TodoApp() {
         </div>
 
         {tabs.length > 0 && (
+          <div style={{ position: "relative" }}>
           <div
             id="tab-scroll-bar"
-            style={{ display: "flex", alignItems: "center", padding: "12px 12px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            style={{ display: "flex", alignItems: "center", padding: "12px 12px 0", overflowX: "auto", WebkitOverflowScrolling: "touch", WebkitMaskImage: "linear-gradient(to right, transparent 0, black 12px, black calc(100% - 24px), transparent 100%)", maskImage: "linear-gradient(to right, transparent 0, black 12px, black calc(100% - 24px), transparent 100%)" }}>
 
             {[...tabs.filter(t => t.pinned), ...tabs.filter(t => !t.pinned)].map(tab => {
               const isActive = tab.id === activeTabId;
@@ -1745,14 +1853,6 @@ function TodoApp() {
                       </span>
                     )}
                   </button>
-                  {isActive && (
-                    <button onClick={() => setDelTabId(tab.id)} style={{
-                      width: 20, height: 20, borderRadius: 6, border: "none", cursor: "pointer",
-                      backgroundColor: "transparent", color: "var(--text-tertiary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 14, marginLeft: -6, marginRight: 2, opacity: 0.6,
-                    }}>✕</button>
-                  )}
                 </div>
               );
             })}
@@ -1779,6 +1879,7 @@ function TodoApp() {
               backgroundColor: "transparent", color: "var(--text-tertiary)",
               fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", marginLeft: 4,
             }}>+</button>
+          </div>
           </div>
         )}
       </div>
@@ -1871,9 +1972,16 @@ function TodoApp() {
             )}
 
             {totalCount === 0 && (
-              <div style={{ textAlign: "center", padding: "50px 20px", color: "var(--text-tertiary)" }}>
-                <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.4 }}>📝</div>
-                <p style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>タスクがありません</p>
+              <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-tertiary)" }}>
+                <div style={{ fontSize: 56, marginBottom: 12, opacity: 0.35 }}>✨</div>
+                <p style={{ fontSize: 16, fontWeight: 600, margin: "0 0 6px", color: "var(--text-secondary)" }}>タスクはありません</p>
+                <p style={{ fontSize: 13, margin: "0 0 20px", lineHeight: 1.6 }}>右下の「＋」ボタンから追加できます。</p>
+                {totalCount === 0 && doneCount === 0 && (
+                  <div style={{ fontSize: 11, lineHeight: 1.7, color: "var(--text-tertiary)", opacity: 0.8 }}>
+                    💡 タスクをタップで編集<br />
+                    💡 左スワイプで削除（元に戻せる）
+                  </div>
+                )}
               </div>
             )}
 
@@ -1888,7 +1996,6 @@ function TodoApp() {
                   onToggle={toggleTask}
                   onDelete={deleteTask}
                   onEdit={setEditingTask}
-                  onMove={tabs.length > 1 ? setMovingTaskId : null}
                   showTabName={isAllView}
                 />
               );
@@ -1908,7 +2015,7 @@ function TodoApp() {
           }
           setShowAddTask(true);
         }} style={{
-          position: "fixed", bottom: 28, right: 28, width: 60, height: 60,
+          position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", right: 28, width: 60, height: 60,
           borderRadius: 18, border: "none", cursor: "pointer",
           backgroundColor: ACCENT, boxShadow: "0 6px 24px " + ACCENT + "50",
           display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50,
@@ -1922,7 +2029,7 @@ function TodoApp() {
 
       {undoData && (
         <div style={{
-          position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
+          position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)",
           backgroundColor: "var(--text-primary)", color: "var(--bg-card)",
           padding: "12px 16px", borderRadius: 14,
           display: "flex", alignItems: "center", gap: 14,
@@ -1930,7 +2037,7 @@ function TodoApp() {
           fontSize: 14, maxWidth: "calc(100vw - 32px)",
         }}>
           <span style={{ fontWeight: 500, opacity: 0.9 }}>
-            「{undoData.task.text.length > 16 ? undoData.task.text.slice(0, 16) + "…" : undoData.task.text}」を削除
+            {undoData.label}
           </span>
           <button onClick={undoDelete} style={{
             background: "none", border: "none", cursor: "pointer",
@@ -1982,7 +2089,34 @@ function TodoApp() {
           }}>保存</button>
         ) : null}>
         {editingTask && (
-          <TaskForm task={editingTask} setTask={setEditingTask} onSubmit={updateTask} submitLabel="保存" />
+          <>
+            <TaskForm task={editingTask} setTask={setEditingTask} onSubmit={updateTask} submitLabel="保存" />
+            <div style={{ marginTop: 8, paddingTop: 16, borderTop: "1px solid var(--border)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button onClick={() => moveTaskInTab(editingTask.id, -1)} style={{
+                padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
+                cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
+                fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+              }}>↑ 上へ</button>
+              <button onClick={() => moveTaskInTab(editingTask.id, 1)} style={{
+                padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
+                cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
+                fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+              }}>↓ 下へ</button>
+              {tabs.length > 1 && (
+                <button onClick={() => { const id = editingTask.id; setEditingTask(null); setMovingTaskId(id); }} style={{
+                  padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
+                  cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
+                  fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                }}>タブを移動</button>
+              )}
+              <button onClick={() => { const id = editingTask.id; setEditingTask(null); deleteTask(id); }} style={{
+                padding: "10px", borderRadius: 10, border: "none",
+                cursor: "pointer", backgroundColor: "#FEF2F2", color: "#EF4444",
+                fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+                gridColumn: tabs.length > 1 ? "auto" : "span 2",
+              }}>削除</button>
+            </div>
+          </>
         )}
       </Modal>
 
@@ -2045,6 +2179,11 @@ function TodoApp() {
               <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: editTabPinned ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
             </button>
           </div>
+          <button onClick={() => { const id = editingTabId; setEditingTabId(null); setDelTabId(id); }} style={{
+            width: "100%", marginTop: 12, padding: "12px", borderRadius: 10, border: "none",
+            cursor: "pointer", backgroundColor: "#FEF2F2", color: "#EF4444",
+            fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+          }}>このタブを削除</button>
         </div>
       </Modal>
 
@@ -2060,6 +2199,54 @@ function TodoApp() {
 
       <Modal isOpen={showCalc} onClose={() => setShowCalc(false)} title="日数計算">
         <DateCalculator />
+      </Modal>
+
+      <Modal isOpen={showSearch} onClose={() => setShowSearch(false)} title="タスク検索">
+        <input
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="タスク名・メモで検索"
+          autoFocus
+          style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 16 }}
+        />
+        {searchQuery.trim() && (() => {
+          const q = searchQuery.trim().toLowerCase();
+          const hits = [];
+          tabs.forEach(t => {
+            t.tasks.forEach(task => {
+              if (task.text.toLowerCase().includes(q) || (task.memo || "").toLowerCase().includes(q)) {
+                hits.push({ task, tab: t });
+              }
+            });
+          });
+          if (hits.length === 0) {
+            return <p style={{ fontSize: 13, color: "var(--text-tertiary)", textAlign: "center", padding: "30px 0" }}>該当するタスクがありません</p>;
+          }
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 4px" }}>{hits.length}件</p>
+              {hits.slice(0, 50).map(({ task, tab }) => (
+                <button key={task.id} onClick={() => { setShowSearch(false); setEditingTask(task); }} style={{
+                  textAlign: "left", padding: "10px 14px", borderRadius: 10,
+                  border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)",
+                  fontFamily: "inherit",
+                  borderLeft: "3px solid " + (tab.color || "#64748B"),
+                  opacity: task.done ? 0.5 : 1,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)", textDecoration: task.done ? "line-through" : "none" }}>{task.text}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 2, display: "flex", gap: 6, alignItems: "center" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tab.color || "#64748B" }} />
+                    {tab.name}
+                    {task.dueDate && <span>・📅 {task.dueDate}</span>}
+                  </div>
+                </button>
+              ))}
+              {hits.length > 50 && (
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", marginTop: 8 }}>…他 {hits.length - 50} 件</p>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
 
       <Modal isOpen={showSettings} onClose={() => setShowSettings(false)} title="設定">
@@ -2125,6 +2312,39 @@ function TodoApp() {
               <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
                 期限切れ・今日が期限・緊急タスクをお知らせします。時刻は時間帯に応じて挨拶が変わります。
               </p>
+            </div>
+          )}
+
+          {USER_ID && (
+            <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
+                LINE コマンド
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 12px", lineHeight: 1.6 }}>
+                LINEのトーク画面で以下のメッセージを送ると操作できます。
+              </p>
+              <div style={{ padding: "12px 14px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13, lineHeight: 1.5 }}>
+                {[
+                  ["タスク", "未完了タスクを一覧表示（個別送信）"],
+                  ["今日", "今日が期限 + 期限切れを一覧表示"],
+                  ["追加 〇〇", "タスクを追加（例: 追加 牛乳を買う）"],
+                  ["通知", "定時通知の設定と内容をプレビュー"],
+                  ["リンク", "アプリのURLを表示"],
+                  ["ヘルプ", "このコマンド一覧を表示"],
+                ].map(([cmd, desc]) => (
+                  <div key={cmd} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+                    <span style={{
+                      fontFamily: "monospace", fontWeight: 700, color: ACCENT,
+                      backgroundColor: ACCENT + "18", padding: "2px 8px", borderRadius: 6,
+                      fontSize: 12, flexShrink: 0, whiteSpace: "nowrap",
+                    }}>{cmd}</span>
+                    <span style={{ color: "var(--text-secondary)" }}>{desc}</span>
+                  </div>
+                ))}
+                <div style={{ paddingTop: 8, marginTop: 4, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+                  💡 タスク通知のメッセージに「<span style={{ fontFamily: "monospace", fontWeight: 600 }}>完了</span>」と引用返信すると、そのタスクを完了にできます。
+                </div>
+              </div>
             </div>
           )}
 
