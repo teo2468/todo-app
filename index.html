@@ -79,6 +79,21 @@ const NOTIFY_OPTIONS = [
   { key: "1day", label: "1日前" },
 ];
 
+const NOTIFY_CATEGORIES = [
+  { key: "overdue",      icon: "⚠️", label: "期限切れ" },
+  { key: "today",        icon: "📅", label: "今日が期限" },
+  { key: "future",       icon: "🔮", label: "明日以降の期限あり" },
+  { key: "highPriority", icon: "🔥", label: "高優先度（期限なし）" },
+];
+
+const DEFAULT_NOTIFY_CATEGORIES = ["overdue", "today", "future", "highPriority"];
+
+const MIN_PRIORITY_OPTIONS = [
+  { key: "all",    label: "すべて" },
+  { key: "medium", label: "中以上" },
+  { key: "high",   label: "高以上" },
+];
+
 const SORT_OPTIONS = [
   { key: "order", label: "順番" },
   { key: "created", label: "作成順" },
@@ -1457,6 +1472,7 @@ function TodoApp() {
   const [editTabName, setEditTabName] = useState("");
   const [editTabColor, setEditTabColor] = useState("");
   const [editTabPinned, setEditTabPinned] = useState(false);
+  const [editTabNotifyInclude, setEditTabNotifyInclude] = useState(true);
   const [sortKey, setSortKey] = useState("created");
   const [sortDir, setSortDir] = useState(SORT_DEFAULTS["created"]);
   const [addToTabId, setAddToTabId] = useState(null);
@@ -1602,12 +1618,13 @@ function TodoApp() {
     setEditTabName(tab.name);
     setEditTabColor(tab.color || TAB_COLORS[0].value);
     setEditTabPinned(!!tab.pinned);
+    setEditTabNotifyInclude(!tab.notifyExclude);
   };
 
   const commitEditTab = () => {
     if (editTabName.trim()) {
       setTabs(tabs.map(t => t.id === editingTabId
-        ? { ...t, name: editTabName.trim(), color: editTabColor, pinned: editTabPinned }
+        ? { ...t, name: editTabName.trim(), color: editTabColor, pinned: editTabPinned, notifyExclude: !editTabNotifyInclude }
         : t
       ));
     }
@@ -2235,7 +2252,7 @@ function TodoApp() {
               }} />
             ))}
           </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>ピン止め（先頭に表示）</span>
             <button onClick={() => setEditTabPinned(p => !p)} style={{
               width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
@@ -2244,6 +2261,17 @@ function TodoApp() {
               <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: editTabPinned ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
             </button>
           </div>
+          {USER_ID && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>定時通知に含める</span>
+              <button onClick={() => setEditTabNotifyInclude(v => !v)} style={{
+                width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
+                backgroundColor: editTabNotifyInclude ? ACCENT : "var(--bg-checkbox)", position: "relative",
+              }}>
+                <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: editTabNotifyInclude ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+              </button>
+            </div>
+          )}
           <button onClick={() => { const id = editingTabId; setEditingTabId(null); setDelTabId(id); }} style={{
             width: "100%", marginTop: 12, padding: "12px", borderRadius: 10, border: "none",
             cursor: "pointer", backgroundColor: "#FEF2F2", color: "#EF4444",
@@ -2404,10 +2432,80 @@ function TodoApp() {
                 <p style={{ fontSize: 12, color: "#22C55E", margin: "8px 0 0", fontWeight: 600, textAlign: "center" }}>✓ 保存しました</p>
               )}
               <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
-                期限切れ・今日が期限・緊急タスクをお知らせします。時刻は時間帯に応じて挨拶が変わります。
+                定時通知の内容は下のセクションでカスタマイズできます。時刻は時間帯に応じて挨拶が変わります。
               </p>
             </div>
           )}
+
+          {USER_ID && (() => {
+            const enabled = (appData.settings && appData.settings.notifyCategories) || DEFAULT_NOTIFY_CATEGORIES;
+            const minPri = (appData.settings && appData.settings.notifyMinPriority) || "all";
+            const updateCats = (newEnabled) => {
+              const newData = { ...appData, settings: { ...(appData.settings || {}), notifyCategories: newEnabled } };
+              updateData(newData); syncNow(newData);
+            };
+            const updateMinPri = (v) => {
+              const newData = { ...appData, settings: { ...(appData.settings || {}), notifyMinPriority: v } };
+              updateData(newData); syncNow(newData);
+            };
+            const resetDefaults = () => {
+              const newData = { ...appData, settings: { ...(appData.settings || {}), notifyCategories: DEFAULT_NOTIFY_CATEGORIES, notifyMinPriority: "all" } };
+              updateData(newData); syncNow(newData);
+            };
+            return (
+              <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
+                  定時通知の内容
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+                  含めるカテゴリ（順序は固定）。LINE「タスク」コマンドにも反映されます。
+                </p>
+                <div style={{ padding: "10px 12px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                  {NOTIFY_CATEGORIES.map(c => {
+                    const on = enabled.indexOf(c.key) !== -1;
+                    return (
+                      <div key={c.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 6px" }}>
+                        <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{c.icon} {c.label}</span>
+                        <button onClick={() => {
+                          const next = on ? enabled.filter(k => k !== c.key) : DEFAULT_NOTIFY_CATEGORIES.filter(k => enabled.indexOf(k) !== -1 || k === c.key);
+                          updateCats(next);
+                        }} style={{
+                          width: 44, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
+                          backgroundColor: on ? ACCENT : "var(--bg-checkbox)", position: "relative",
+                        }}>
+                          <div style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff", position: "absolute", top: 3, left: on ? 21 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>最低優先度</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+                  {MIN_PRIORITY_OPTIONS.map(p => {
+                    const sel = minPri === p.key;
+                    return (
+                      <button key={p.key} onClick={() => updateMinPri(p.key)} style={{
+                        padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
+                        backgroundColor: sel ? ACCENT : "var(--bg-badge)",
+                        color: sel ? "#fff" : "var(--text-secondary)",
+                        fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                      }}>{p.label}</button>
+                    );
+                  })}
+                </div>
+
+                <button onClick={resetDefaults} style={{
+                  width: "100%", padding: "10px", borderRadius: 10, border: "1px solid var(--border)",
+                  cursor: "pointer", backgroundColor: "var(--bg-card)",
+                  color: "var(--text-secondary)", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                }}>デフォルトに戻す</button>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                  特定タブを除外したい場合は、タブ編集モーダルの「定時通知に含める」をオフに。
+                </p>
+              </div>
+            );
+          })()}
 
           {USER_ID && (
             <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
@@ -2417,14 +2515,16 @@ function TodoApp() {
               <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 12px", lineHeight: 1.6 }}>
                 LINEのトーク画面で以下のメッセージを送ると操作できます。
               </p>
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 8px" }}>
+                ひらがなでもOK（例: たすく / きょう / こまんど）
+              </p>
               <div style={{ padding: "12px 14px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13, lineHeight: 1.5 }}>
                 {[
                   ["タスク", "未完了タスクを一覧表示（個別送信）"],
                   ["今日", "今日が期限 + 期限切れを一覧表示"],
-                  ["追加 〇〇", "タスクを追加（例: 追加 牛乳を買う）"],
                   ["通知", "定時通知の設定と内容をプレビュー"],
                   ["リンク", "アプリのURLを表示"],
-                  ["ヘルプ", "このコマンド一覧を表示"],
+                  ["コマンド", "このコマンド一覧を表示"],
                 ].map(([cmd, desc]) => (
                   <div key={cmd} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
                     <span style={{
