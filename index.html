@@ -102,7 +102,7 @@ const SORT_OPTIONS = [
   { key: "progress", label: "進捗" },
 ];
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxspe5iNa8Z2rC1JbQ_AFY_BYLcConcBU3512F7lagdel_tvBnbiTOX8R5bSl_KUYWe9g/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyREDlXblHd1ICrEnnrM_CsnQ61jNACJ8nXRaRrnCPfBsunsu3mgM79EOG_MQACgugCRw/exec";
 
 const USER_ID = new URLSearchParams(window.location.search).get('user') || null;
 
@@ -346,35 +346,56 @@ function useStorage() {
   const [loaded, setLoaded] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const latestDataRef = useRef({ tabs: [], countdowns: [] });
+  const localUpdatedAtRef = useRef(null);
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    (async () => {
-      if (USER_ID) {
+    let hasLocal = false;
+
+    // Step 1: localStorage を即座に読み込み → 表示
+    try {
+      const r = localStorage.getItem("todo-app-v6");
+      const tsr = localStorage.getItem("todo-app-v6-updatedAt");
+      if (r) {
+        const parsed = JSON.parse(r);
+        setAppData(parsed);
+        latestDataRef.current = parsed;
+        localUpdatedAtRef.current = tsr || null;
+        setLoaded(true);
+        hasLocal = true;
+      }
+    } catch (e) {}
+
+    // Step 2: 裏でGASから最新を取得し、より新しければ静かに差し替え
+    if (USER_ID) {
+      (async () => {
         try {
           const res = await fetch(`${GAS_URL}?action=load&userId=${USER_ID}`);
           const json = await res.json();
           if (json.data) {
-            const parsed = JSON.parse(json.data);
-            setAppData(parsed);
-            latestDataRef.current = parsed;
-            setLoaded(true);
-            return;
+            const gasTs = json.updatedAt || null;
+            const localTs = localUpdatedAtRef.current;
+            // GASの方が厳密に新しい場合だけ差し替え（編集中の上書きを防止）
+            const shouldSwap = !hasLocal || (gasTs && (!localTs || gasTs > localTs));
+            if (shouldSwap) {
+              const parsed = JSON.parse(json.data);
+              setAppData(parsed);
+              latestDataRef.current = parsed;
+              localUpdatedAtRef.current = gasTs;
+              try {
+                localStorage.setItem("todo-app-v6", JSON.stringify(parsed));
+                if (gasTs) localStorage.setItem("todo-app-v6-updatedAt", gasTs);
+              } catch (e) {}
+            }
           }
         } catch (e) {
-          console.log("Cloud load failed, falling back to localStorage");
+          console.log("GAS background load failed");
         }
-      }
-      try {
-        const r = localStorage.getItem("todo-app-v6");
-        if (r) {
-          const parsed = JSON.parse(r);
-          setAppData(parsed);
-          latestDataRef.current = parsed;
-        }
-      } catch (e) {}
+        if (!hasLocal) setLoaded(true);
+      })();
+    } else if (!hasLocal) {
       setLoaded(true);
-    })();
+    }
   }, []);
 
   const syncToGAS = useCallback((data) => {
@@ -395,7 +416,12 @@ function useStorage() {
 
   const save = useCallback((d) => {
     latestDataRef.current = d;
-    try { localStorage.setItem("todo-app-v6", JSON.stringify(d)); } catch (e) {}
+    const ts = new Date().toISOString();
+    try {
+      localStorage.setItem("todo-app-v6", JSON.stringify(d));
+      localStorage.setItem("todo-app-v6-updatedAt", ts);
+    } catch (e) {}
+    localUpdatedAtRef.current = ts;
     if (USER_ID) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => { syncToGAS(d); }, 5000);
@@ -416,7 +442,12 @@ function useStorage() {
         const parsed = JSON.parse(json.data);
         setAppData(parsed);
         latestDataRef.current = parsed;
-        try { localStorage.setItem("todo-app-v6", JSON.stringify(parsed)); } catch (e) {}
+        const gasTs = json.updatedAt || new Date().toISOString();
+        try {
+          localStorage.setItem("todo-app-v6", JSON.stringify(parsed));
+          localStorage.setItem("todo-app-v6-updatedAt", gasTs);
+        } catch (e) {}
+        localUpdatedAtRef.current = gasTs;
         return true;
       }
     } catch (e) {}
@@ -945,14 +976,34 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   );
 }
 
-const TASK_SIZES = {
-  small:  { padY: 5,  padX: 13, font: 13, checkSize: 24, badgeFont: 10, memoFont: 11, iconFont: 40 },
-  medium: { padY: 8,  padX: 16, font: 15, checkSize: 28, badgeFont: 11, memoFont: 13, iconFont: 56 },
-  large:  { padY: 12, padX: 18, font: 18, checkSize: 34, badgeFont: 13, memoFont: 15, iconFont: 64 },
-};
+const TASK_SIZE_BASE = { padY: 8, padX: 16, font: 15, checkSize: 28, badgeFont: 11, memoFont: 13 };
+const TASK_SIZE_MIN = 0.5;
+const TASK_SIZE_MAX = 2.0;
+const TASK_SIZE_DEFAULT = 1.0;
+
+function getTaskSizeScale(v) {
+  // 旧データ互換
+  if (v === 'small') return 0.85;
+  if (v === 'medium') return 1.0;
+  if (v === 'large') return 1.2;
+  const n = parseFloat(v);
+  if (isNaN(n)) return TASK_SIZE_DEFAULT;
+  return Math.max(TASK_SIZE_MIN, Math.min(TASK_SIZE_MAX, n));
+}
+
+function buildTaskSize(scale) {
+  return {
+    padY:      Math.round(TASK_SIZE_BASE.padY * scale),
+    padX:      Math.round(TASK_SIZE_BASE.padX * scale),
+    font:      Math.round(TASK_SIZE_BASE.font * scale),
+    checkSize: Math.round(TASK_SIZE_BASE.checkSize * scale),
+    badgeFont: Math.max(9, Math.round(TASK_SIZE_BASE.badgeFont * scale)),
+    memoFont:  Math.max(10, Math.round(TASK_SIZE_BASE.memoFont * scale)),
+  };
+}
 
 function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onReorderDragStart, onReorderDragOver, onReorderDrop, onReorderDragEnd, isDragging, isDragOver, taskSize }) {
-  const sz = TASK_SIZES[taskSize] || TASK_SIZES.medium;
+  const sz = buildTaskSize(getTaskSizeScale(taskSize));
   const ts = tabStyle || { main: "#64748B", bg: "#F1F5F9" };
   const isRepeat = task.repeat && task.repeat !== "none";
   const progress = task.progress || 0;
@@ -2355,34 +2406,37 @@ function TodoApp() {
             </button>
           </div>
 
-          <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 10 }}>タスクの大きさ</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-              {[
-                { key: "small", label: "小" },
-                { key: "medium", label: "中" },
-                { key: "large", label: "大" },
-              ].map(opt => {
-                const current = (appData.settings && appData.settings.taskSize) || "medium";
-                const sel = current === opt.key;
-                return (
-                  <button key={opt.key}
-                    onClick={() => {
-                      const newData = { ...appData, settings: { ...(appData.settings || {}), taskSize: opt.key } };
-                      updateData(newData);
-                      syncNow(newData);
-                    }}
-                    style={{
-                      padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
-                      backgroundColor: sel ? ACCENT : "var(--bg-card)",
-                      color: sel ? "#fff" : "var(--text-secondary)",
-                      fontSize: opt.key === "small" ? 12 : opt.key === "large" ? 16 : 14,
-                      fontWeight: 700, fontFamily: "inherit",
-                    }}>{opt.label}</button>
-                );
-              })}
-            </div>
-          </div>
+          {(() => {
+            const currentScale = getTaskSizeScale(appData.settings && appData.settings.taskSize);
+            const update = (v) => {
+              const newData = { ...appData, settings: { ...(appData.settings || {}), taskSize: v } };
+              updateData(newData);
+            };
+            return (
+              <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>タスクの大きさ</span>
+                  <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontFamily: "monospace" }}>{currentScale.toFixed(2)}x</span>
+                </div>
+                <input
+                  type="range"
+                  min={TASK_SIZE_MIN} max={TASK_SIZE_MAX} step="0.05"
+                  value={currentScale}
+                  onChange={(e) => update(parseFloat(e.target.value))}
+                  onDoubleClick={() => update(TASK_SIZE_DEFAULT)}
+                  style={{ width: "100%", accentColor: ACCENT }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-tertiary)", marginTop: 2 }}>
+                  <span>小</span>
+                  <button onClick={() => update(TASK_SIZE_DEFAULT)} style={{
+                    background: "none", border: "none", cursor: "pointer", padding: "2px 6px",
+                    fontSize: 11, color: "var(--text-tertiary)", fontFamily: "inherit",
+                  }}>中（リセット）</button>
+                  <span>大</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {USER_ID && (
             <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
