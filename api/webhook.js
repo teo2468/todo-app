@@ -3,7 +3,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).send('Method Not Allowed');
   }
 
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyREDlXblHd1ICrEnnrM_CsnQ61jNACJ8nXRaRrnCPfBsunsu3mgM79EOG_MQACgugCRw/exec';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxspe5iNa8Z2rC1JbQ_AFY_BYLcConcBU3512F7lagdel_tvBnbiTOX8R5bSl_KUYWe9g/exec';
 
   const bodyStr = JSON.stringify(req.body);
   console.log('[webhook] received. events:', req.body?.events?.length ?? 0);
