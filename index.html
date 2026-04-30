@@ -50,7 +50,7 @@ const REPEAT_PRESETS = [
   { key: "weekly", label: "毎週" },
   { key: "monthly", label: "毎月" },
   { key: "weekdays", label: "平日（月〜金）" },
-  { key: "custom", label: "カスタム..." },
+  { key: "custom", label: "カスタム" },
 ];
 
 const CUSTOM_UNITS = [
@@ -77,7 +77,37 @@ const NOTIFY_OPTIONS = [
   { key: "30min", label: "30分前" },
   { key: "1hour", label: "1時間前" },
   { key: "1day", label: "1日前" },
+  { key: "custom", label: "カスタム" },
 ];
+
+const NOTIFY_MINUTES_MAP = {
+  "on_time": 0, "5min": 5, "10min": 10, "15min": 15,
+  "30min": 30, "1hour": 60, "1day": 1440,
+};
+
+function getNotifyMinutes(task) {
+  if (task.notifyTiming === "custom") {
+    return Math.max(0, parseInt(task.notifyCustomMin) || 0);
+  }
+  return NOTIFY_MINUTES_MAP[task.notifyTiming] || 0;
+}
+
+function getNotifyLabel(task) {
+  if (task.notifyTiming === "custom") {
+    const min = parseInt(task.notifyCustomMin) || 0;
+    if (min === 0) return "ちょうど";
+    const days = Math.floor(min / 1440);
+    const hours = Math.floor((min % 1440) / 60);
+    const mins = min % 60;
+    let parts = [];
+    if (days) parts.push(days + "日");
+    if (hours) parts.push(hours + "時間");
+    if (mins) parts.push(mins + "分");
+    return parts.join("") + "前";
+  }
+  const opt = NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming);
+  return opt ? opt.label : "";
+}
 
 const NOTIFY_CATEGORIES = [
   { key: "overdue",      icon: "⚠️", label: "期限切れ" },
@@ -108,11 +138,7 @@ const USER_ID = new URLSearchParams(window.location.search).get('user') || null;
 
 function sendNotifyToGAS(task) {
   if (!task.notify || !task.dueDate || !USER_ID) return;
-  const NOTIFY_MINUTES = {
-    "on_time": 0, "5min": 5, "10min": 10, "15min": 15,
-    "30min": 30, "1hour": 60, "1day": 1440,
-  };
-  const mins = NOTIFY_MINUTES[task.notifyTiming] || 0;
+  const mins = getNotifyMinutes(task);
   const timeStr = task.dueTime || "09:00";
   const notifyTime = new Date(task.dueDate + "T" + timeStr);
   notifyTime.setMinutes(notifyTime.getMinutes() - mins);
@@ -539,6 +565,8 @@ function DateInput({ value, onChange, style }) {
         onChange={e => { onChange(e.target.value); setTyping(""); }}
         onFocus={() => setTyping("")}
         onBlur={() => { commitDigits(typing); }}
+        onClick={e => e.stopPropagation()}
+        onTouchStart={e => e.stopPropagation()}
         onKeyDown={e => {
           if (/^\d$/.test(e.key)) {
             e.preventDefault();
@@ -561,9 +589,19 @@ function DateInput({ value, onChange, style }) {
           color: "var(--text-primary)",
           fontSize: 14, fontFamily: "inherit",
           outline: "none", boxSizing: "border-box",
+          colorScheme: "light dark",
           ...style,
         }}
       />
+      {!value && (
+        <div style={{
+          position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+          color: "var(--text-tertiary)", fontSize: 14, pointerEvents: "none",
+          opacity: 0.6, fontFamily: "inherit",
+        }}>
+          ----/--/--
+        </div>
+      )}
       {typing && (
         <div style={{
           marginTop: 4, padding: "5px 10px", borderRadius: 8,
@@ -1157,7 +1195,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
             <p style={{ margin: "4px 0 0", fontSize: sz.memoFont, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
           )}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6, minHeight: Math.round(sz.badgeFont * 1.7) }}>
             {showTabName && task._tabName && (
               <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
             )}
@@ -1186,7 +1224,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
             )}
             {task.notify && (
               <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
-                {"🔔 " + ((NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming) || {}).label || "")}
+                {"🔔 " + getNotifyLabel(task)}
               </span>
             )}
           </div>
@@ -1371,7 +1409,13 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
           <div style={{ padding: "10px 16px", backgroundColor: "var(--bg-badge)", borderRadius: "0 0 12px 12px", borderTop: "1px solid var(--border)" }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {NOTIFY_OPTIONS.map(n => (
-                <button key={n.key} onClick={() => setTask({ ...task, notifyTiming: n.key })} style={{
+                <button key={n.key} onClick={() => {
+                  if (n.key === "custom" && task.notifyTiming !== "custom") {
+                    setTask({ ...task, notifyTiming: "custom", notifyCustomMin: task.notifyCustomMin || 0 });
+                  } else {
+                    setTask({ ...task, notifyTiming: n.key });
+                  }
+                }} style={{
                   padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
                   fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                   backgroundColor: task.notifyTiming === n.key ? ACCENT : "var(--bg-card)",
@@ -1379,6 +1423,38 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
                 }}>{n.label}</button>
               ))}
             </div>
+            {task.notifyTiming === "custom" && (() => {
+              const min = parseInt(task.notifyCustomMin) || 0;
+              const days = Math.floor(min / 1440);
+              const hours = Math.floor((min % 1440) / 60);
+              const mins = min % 60;
+              const update = (d, h, m) => {
+                const total = (d || 0) * 1440 + (h || 0) * 60 + (m || 0);
+                setTask({ ...task, notifyCustomMin: total });
+              };
+              const inputStyle = {
+                width: 56, padding: "6px 8px", borderRadius: 8,
+                border: "1px solid var(--border)", backgroundColor: "var(--bg-input)",
+                color: "var(--text-primary)", fontSize: 13, fontFamily: "inherit",
+                outline: "none", textAlign: "center",
+              };
+              return (
+                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <input type="number" min="0" max="60" value={days}
+                    onChange={e => update(parseInt(e.target.value) || 0, hours, mins)}
+                    style={inputStyle} />
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>日</span>
+                  <input type="number" min="0" max="23" value={hours}
+                    onChange={e => update(days, parseInt(e.target.value) || 0, mins)}
+                    style={inputStyle} />
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>時間</span>
+                  <input type="number" min="0" max="59" value={mins}
+                    onChange={e => update(days, hours, parseInt(e.target.value) || 0)}
+                    style={inputStyle} />
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>分前</span>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -2149,13 +2225,12 @@ function TodoApp() {
 
       {tabs.length > 0 && !isCountdownView && (
         <button onClick={() => {
-          if (isAllView && tabs.length === 1) {
+          if (isAllView) {
             setAddToTabId(tabs[0].id);
-          } else if (isAllView) {
-            setAddToTabId(null);
           } else {
             setAddToTabId(activeTabId);
           }
+          setNewTask({ ...emptyTask });
           setShowAddTask(true);
         }} style={{
           position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", right: 28, width: 60, height: 60,
@@ -2199,21 +2274,25 @@ function TodoApp() {
             fontSize: 15, fontWeight: 700, fontFamily: "inherit",
           }}>追加</button>
         ) : null}>
-        {isAllView && !addToTabId && (
+        {isAllView && tabs.length > 1 && addToTabId && (
           <div style={{ marginBottom: 14 }}>
             <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>追加先のタブ</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {tabs.map(t => (
-                <button key={t.id} onClick={() => setAddToTabId(t.id)} style={{
-                  padding: "8px 16px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                  backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color || "#64748B" }} />
-                  {t.name}
-                </button>
-              ))}
+              {tabs.map(t => {
+                const sel = t.id === addToTabId;
+                return (
+                  <button key={t.id} onClick={() => setAddToTabId(t.id)} style={{
+                    padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
+                    fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                    backgroundColor: sel ? (t.color || "#64748B") : "var(--bg-badge)",
+                    color: sel ? "#fff" : "var(--text-secondary)",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}>
+                    {!sel && <span style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color || "#64748B" }} />}
+                    {t.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
