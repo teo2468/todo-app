@@ -544,7 +544,17 @@ function TimeInput({ value, onChange }) {
 }
 
 function DateInput({ value, onChange, style }) {
+  const inputRef = useRef(null);
+  const [hasValue, setHasValue] = useState(!!value);
   const [typing, setTyping] = useState("");
+
+  // 外部から value が変化したら DOM を直接更新（uncontrolled でも追従）
+  useEffect(() => {
+    if (inputRef.current && inputRef.current.value !== (value || "")) {
+      inputRef.current.value = value || "";
+    }
+    setHasValue(!!value);
+  }, [value]);
 
   const commitDigits = (digits) => {
     if (!digits) return;
@@ -553,7 +563,11 @@ function DateInput({ value, onChange, style }) {
     if (digits.length === 4) iso = `${yr}-${digits.slice(0,2)}-${digits.slice(2,4)}`;
     else if (digits.length === 6) iso = `20${digits.slice(0,2)}-${digits.slice(2,4)}-${digits.slice(4,6)}`;
     else if (digits.length === 8) iso = `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`;
-    if (iso) onChange(iso);
+    if (iso) {
+      onChange(iso);
+      if (inputRef.current) inputRef.current.value = iso;
+      setHasValue(true);
+    }
     setTyping("");
   };
 
@@ -561,10 +575,14 @@ function DateInput({ value, onChange, style }) {
     <div style={{ position: "relative", width: "100%" }}>
       <input
         type="date"
-        value={value || ""}
-        onChange={e => { onChange(e.target.value); setTyping(""); }}
-        onFocus={() => setTyping("")}
-        onBlur={() => { commitDigits(typing); }}
+        ref={inputRef}
+        defaultValue={value || ""}
+        onChange={e => {
+          const v = e.target.value;
+          setHasValue(!!v);
+          onChange(v);
+          setTyping("");
+        }}
         onClick={e => e.stopPropagation()}
         onTouchStart={e => e.stopPropagation()}
         onKeyDown={e => {
@@ -572,9 +590,7 @@ function DateInput({ value, onChange, style }) {
             e.preventDefault();
             const cur = (typing + e.key).slice(0, 8);
             setTyping(cur);
-            if (cur.length === 8) commitDigits(cur);
-            else if (cur.length === 6) { onChange(`20${cur.slice(0,2)}-${cur.slice(2,4)}-${cur.slice(4,6)}`); }
-            else if (cur.length === 4) { onChange(`${new Date().getFullYear()}-${cur.slice(0,2)}-${cur.slice(2,4)}`); }
+            if (cur.length === 8 || cur.length === 6 || cur.length === 4) commitDigits(cur);
           } else if (e.key === "Enter") {
             commitDigits(typing);
           } else if (e.key === "Backspace") {
@@ -593,7 +609,7 @@ function DateInput({ value, onChange, style }) {
           ...style,
         }}
       />
-      {!value && (
+      {!hasValue && (
         <div style={{
           position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
           color: "var(--text-tertiary)", fontSize: 14, pointerEvents: "none",
