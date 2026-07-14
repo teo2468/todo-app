@@ -2098,17 +2098,14 @@ function TodoApp() {
                 </div>
               )}
             </div>
-            <button onClick={() => setActiveTabId(activeTabId === COUNTDOWN_TAB ? ALL_TAB : COUNTDOWN_TAB)} style={{
-              padding: "5px 10px", borderRadius: 10, border: "none", cursor: "pointer",
-              backgroundColor: activeTabId === COUNTDOWN_TAB ? "#F97316" : "var(--bg-badge)",
-              color: activeTabId === COUNTDOWN_TAB ? "#fff" : "var(--text-secondary)",
-              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+            <span style={{
+              padding: "5px 10px", borderRadius: 10,
+              backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
+              fontSize: 12, fontWeight: 600,
               display: "flex", alignItems: "center", gap: 5,
-              transition: "background-color 0.2s",
             }}>
-              <span>📅</span>
               <span>{new Date().toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" })}</span>
-            </button>
+            </span>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {USER_ID && (
@@ -2217,6 +2214,34 @@ function TodoApp() {
                 </span>
               )}
             </button>
+
+            {(() => {
+              const isCdActive = activeTabId === COUNTDOWN_TAB;
+              const CD_COLOR = "#F97316";
+              const nearest = countdowns
+                .map(c => daysUntil(c.date))
+                .filter(d => d >= 0)
+                .sort((a, b) => a - b)[0];
+              return (
+                <button onClick={() => setActiveTabId(COUNTDOWN_TAB)} style={{
+                  padding: "10px 14px", border: "none", cursor: "pointer",
+                  fontSize: isCdActive ? 14 : 13,
+                  fontWeight: isCdActive ? 700 : 500, whiteSpace: "nowrap",
+                  color: isCdActive ? CD_COLOR : "var(--text-secondary)",
+                  backgroundColor: "transparent",
+                  borderBottom: isCdActive ? "3px solid " + CD_COLOR : "3px solid transparent",
+                  fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
+                }}>
+                  <span>📅</span>
+                  {isCdActive && <span>カウントダウン</span>}
+                  {nearest != null && (
+                    <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: isCdActive ? CD_COLOR : "var(--bg-badge)", color: isCdActive ? "#fff" : CD_COLOR, padding: "1px 6px", borderRadius: 10 }}>
+                      {nearest === 0 ? "今日" : "あと" + nearest + "日"}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
 
             <button onClick={() => setShowAddTab(true)} style={{
               width: 28, height: 28, minWidth: 28, borderRadius: 8,
