@@ -1,6 +1,7 @@
 // ============================================
-// ToDo アプリ GAS コード v9
+// ToDo アプリ GAS コード v10
 // 通知基盤: Discord（Vercel中継 /api/discord/send 経由）
+// v10: チャンネル通知対応・複数通知タイミング・期限超過アラート
 // ============================================
 const SPREADSHEET_ID = '1lIYGcsu_XWzweXHj82M4QM2pCoSLtSiFsBj5hLfzNkg';
 const APP_URL = 'https://todo-app-tawny-iota-98.vercel.app';
@@ -11,6 +12,11 @@ const SHEET_SYNC = 'sync';
 
 // notifyAtがこれより古い予約は送信せず破棄（滞留した過去予約の一斉送信防止）
 const STALE_NOTIFY_HOURS = 6;
+
+// 期限超過アラート: 期限をこの分数以上過ぎたら1回だけ通知（「ちょうど」通知との重複を避ける猶予）
+const OVERDUE_ALERT_GRACE_MIN = 30;
+// 期限超過アラート: これより古い期限切れは通知せずマークのみ（導入時の一斉送信防止）
+const OVERDUE_ALERT_WINDOW_HOURS = 6;
 
 // usersシート列（lineUserId列は未使用だが列構成維持のため残す）
 const COL_USER_ID = 0;
@@ -38,15 +44,19 @@ const COLOR_DEFAULT = 0x5865F2;
 // Discord送信（Vercel中継）
 // ============================================
 // payload: { content?, embeds?, components?, channelId?, messageId? }
-// channelId省略 → Vercel側でDISCORD_USER_ID宛のDMに解決される
+// channelId省略 → Script PropertiesのDISCORD_CHANNEL_IDがあればそのチャンネル宛、
+// それも無ければVercel側でDISCORD_USER_ID宛のDMに解決される
 // 成功時はmessageIdを返し、失敗時はログに残してnullを返す
 function sendDiscordMessage(payload) {
   try {
-    const secret = PropertiesService.getScriptProperties().getProperty('DISCORD_RELAY_SECRET');
+    const props = PropertiesService.getScriptProperties();
+    const secret = props.getProperty('DISCORD_RELAY_SECRET');
     if (!secret) {
       Logger.log('sendDiscordMessage: DISCORD_RELAY_SECRET が未設定');
       return null;
     }
+    const channelId = props.getProperty('DISCORD_CHANNEL_ID');
+    if (channelId && !payload.channelId) payload = Object.assign({ channelId: channelId }, payload);
     const res = UrlFetchApp.fetch(APP_URL + '/api/discord/send', {
       method: 'post',
       contentType: 'application/json',
@@ -137,12 +147,15 @@ function handleNotify(body) {
   for (let i = data.length - 1; i >= 1; i--) {
     if (data[i][0] === body.userId && data[i][1] === body.taskId) sheet.deleteRow(i + 1);
   }
-  // 過去時刻は登録しない（期限切れタスクの編集・チェック解除で即通知が飛ぶのを防ぐ）
-  const notifyAt = new Date(body.notifyAt);
-  if (isNaN(notifyAt.getTime()) || notifyAt.getTime() <= Date.now()) {
-    return ContentService.createTextOutput('ok');
-  }
-  sheet.appendRow([body.userId, body.taskId, body.taskName, body.notifyAt]);
+  // 複数タイミング対応: notifyAts配列を優先し、旧形式notifyAt単体もフォールバックで受ける
+  const list = Array.isArray(body.notifyAts) ? body.notifyAts : (body.notifyAt ? [body.notifyAt] : []);
+  const nowTs = Date.now();
+  list.forEach((iso) => {
+    // 過去時刻は登録しない（期限切れタスクの編集・チェック解除で即通知が飛ぶのを防ぐ）
+    const t = new Date(iso);
+    if (isNaN(t.getTime()) || t.getTime() <= nowTs) return;
+    sheet.appendRow([body.userId, body.taskId, body.taskName, iso]);
+  });
   return ContentService.createTextOutput('ok');
 }
 
@@ -279,6 +292,7 @@ function checkAndNotify() {
     checkTaskNotifications(ss);
     checkDailyNotify(ss, uSheet, users);
     checkCountdownReminders(ss);
+    checkOverdueAlerts(ss);
   } finally {
     lock.releaseLock();
   }
@@ -425,6 +439,58 @@ function checkCountdownReminders(ss) {
 
     if (changed) {
       appData.countdowns = countdowns;
+      syncSheet.getRange(j + 1, 2).setValue(JSON.stringify(appData));
+      syncSheet.getRange(j + 1, 3).setValue(new Date().toISOString());
+    }
+  }
+}
+
+// ============================================
+// 期限超過アラート
+// 時刻つき期限を過ぎた未完了タスクに1回だけ通知する。
+// 送信済みマークはappData内のtask.overdueAlertedに持つ（期限変更時はアプリ側でクリア）
+// ============================================
+function checkOverdueAlerts(ss) {
+  const syncSheet = ss.getSheetByName(SHEET_SYNC);
+  if (!syncSheet) return;
+
+  const now = new Date();
+  const nowTs = now.getTime();
+  const today = Utilities.formatDate(now, 'Asia/Tokyo', 'yyyy-MM-dd');
+  const syncData = syncSheet.getDataRange().getValues();
+
+  for (let j = 1; j < syncData.length; j++) {
+    let appData;
+    try { appData = JSON.parse(syncData[j][1]); } catch (e) { continue; }
+
+    const settings = appData.settings || {};
+    if (settings.overdueAlert === false) continue;
+
+    let changed = false;
+    (appData.tabs || []).forEach((tab) => {
+      (tab.tasks || []).forEach((task) => {
+        if (task.done || !task.dueDate || !task.dueTime) return;
+        if (task.overdueAlerted) return;
+        const dueTs = new Date(task.dueDate + 'T' + getTimeString(task.dueTime) + ':00+09:00').getTime();
+        if (isNaN(dueTs)) return;
+        const overdueMs = nowTs - dueTs;
+        if (overdueMs < OVERDUE_ALERT_GRACE_MIN * 60 * 1000) return;
+
+        // 窓内なら送信。古すぎるものはマークのみ（一斉送信防止）
+        if (overdueMs <= OVERDUE_ALERT_WINDOW_HOURS * 60 * 60 * 1000) {
+          const embed = buildTaskEmbed(task, today, tab.name);
+          embed.color = COLOR_OVERDUE;
+          sendDiscordMessage({
+            content: '⏰ 期限を過ぎています: ' + task.text,
+            embeds: [embed],
+          });
+        }
+        task.overdueAlerted = now.toISOString();
+        changed = true;
+      });
+    });
+
+    if (changed) {
       syncSheet.getRange(j + 1, 2).setValue(JSON.stringify(appData));
       syncSheet.getRange(j + 1, 3).setValue(new Date().toISOString());
     }

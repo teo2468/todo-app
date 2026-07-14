@@ -85,28 +85,40 @@ const NOTIFY_MINUTES_MAP = {
   "30min": 30, "1hour": 60, "1day": 1440,
 };
 
-function getNotifyMinutes(task) {
-  if (task.notifyTiming === "custom") {
-    return Math.max(0, parseInt(task.notifyCustomMin) || 0);
-  }
-  return NOTIFY_MINUTES_MAP[task.notifyTiming] || 0;
+// 通知タイミングは複数選択可。旧データ（notifyTiming単体）もフォールバックで読む
+function getTaskTimings(task) {
+  if (task.notifyTimings && task.notifyTimings.length) return task.notifyTimings;
+  return [task.notifyTiming || "on_time"];
+}
+
+function timingToMinutes(task, key) {
+  if (key === "custom") return Math.max(0, parseInt(task.notifyCustomMin) || 0);
+  return NOTIFY_MINUTES_MAP[key] || 0;
+}
+
+function getNotifyMinutesList(task) {
+  return [...new Set(getTaskTimings(task).map(k => timingToMinutes(task, k)))];
+}
+
+function formatMinutesBefore(min) {
+  if (min === 0) return "ちょうど";
+  const days = Math.floor(min / 1440);
+  const hours = Math.floor((min % 1440) / 60);
+  const mins = min % 60;
+  let parts = [];
+  if (days) parts.push(days + "日");
+  if (hours) parts.push(hours + "時間");
+  if (mins) parts.push(mins + "分");
+  return parts.join("") + "前";
 }
 
 function getNotifyLabel(task) {
-  if (task.notifyTiming === "custom") {
-    const min = parseInt(task.notifyCustomMin) || 0;
-    if (min === 0) return "ちょうど";
-    const days = Math.floor(min / 1440);
-    const hours = Math.floor((min % 1440) / 60);
-    const mins = min % 60;
-    let parts = [];
-    if (days) parts.push(days + "日");
-    if (hours) parts.push(hours + "時間");
-    if (mins) parts.push(mins + "分");
-    return parts.join("") + "前";
-  }
-  const opt = NOTIFY_OPTIONS.find(n => n.key === task.notifyTiming);
-  return opt ? opt.label : "";
+  const labels = getTaskTimings(task).map(k => {
+    if (k === "custom") return formatMinutesBefore(parseInt(task.notifyCustomMin) || 0);
+    const opt = NOTIFY_OPTIONS.find(n => n.key === k);
+    return opt ? opt.label : "";
+  }).filter(Boolean);
+  return labels.join("・");
 }
 
 const NOTIFY_CATEGORIES = [
@@ -138,10 +150,12 @@ const USER_ID = new URLSearchParams(window.location.search).get('user') || null;
 
 function sendNotifyToGAS(task) {
   if (!task.notify || !task.dueDate || !USER_ID) return;
-  const mins = getNotifyMinutes(task);
   const timeStr = task.dueTime || "09:00";
-  const notifyTime = new Date(task.dueDate + "T" + timeStr);
-  notifyTime.setMinutes(notifyTime.getMinutes() - mins);
+  const notifyAts = getNotifyMinutesList(task).map(mins => {
+    const t = new Date(task.dueDate + "T" + timeStr);
+    t.setMinutes(t.getMinutes() - mins);
+    return t.toISOString();
+  });
 
   fetch(GAS_URL, {
     method: "POST",
@@ -152,7 +166,8 @@ function sendNotifyToGAS(task) {
       userId: USER_ID,
       taskId: task.id || "",
       taskName: task.text,
-      notifyAt: notifyTime.toISOString(),
+      notifyAts: notifyAts,
+      notifyAt: notifyAts[0], // 旧GAS向けフォールバック
     }),
   }).catch(() => {});
 }
@@ -188,7 +203,7 @@ const gid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 
 const emptyTask = {
   text: "", memo: "", dueDate: "", dueTime: "", priority: "none",
-  notify: false, notifyTiming: "on_time", repeat: "none",
+  notify: false, notifyTiming: "on_time", notifyTimings: ["on_time"], repeat: "none",
   repeatDays: [], repeatMonthDay: 1, monthMode: "date",
   monthOrdinal: 1, monthWeekday: 1, customInterval: 1,
   customUnit: "day", progress: 0,
@@ -320,6 +335,54 @@ function computeNextOccurrence(task, baseTs) {
   return next.getTime();
 }
 
+function tsToDateStr(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+// 繰り返しタスクの「次回発生日」。今日がパターンに一致し期限時刻をまだ過ぎていなければ今日
+function nextOccurrenceDateStr(task) {
+  const now = new Date();
+  const timeStr = task.dueTime || "09:00";
+  const todayDue = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+    parseInt(timeStr.slice(0, 2), 10) || 0, parseInt(timeStr.slice(3, 5), 10) || 0);
+
+  const matchesToday = (() => {
+    const r = task.repeat;
+    const dow = now.getDay();
+    if (r === "daily") return true;
+    if (r === "weekdays") return dow >= 1 && dow <= 5;
+    if (r === "weekly") {
+      const d = task.repeatDays || [];
+      return d.length === 0 || d.includes(dow);
+    }
+    if (r === "monthly") {
+      if (task.monthMode === "weekday") {
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        const ord = task.monthOrdinal || 1;
+        const wd = task.monthWeekday != null ? task.monthWeekday : 0;
+        if (ord > 0) {
+          while (d.getDay() !== wd) d.setDate(d.getDate() + 1);
+          d.setDate(d.getDate() + (ord - 1) * 7);
+        } else {
+          d.setMonth(d.getMonth() + 1);
+          d.setDate(0);
+          while (d.getDay() !== wd) d.setDate(d.getDate() - 1);
+        }
+        return d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      }
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      return now.getDate() === Math.min(task.repeatMonthDay || 1, lastDay);
+    }
+    return true; // custom等は固定アンカーがないため今日を初回にできる
+  })();
+
+  const ts = (matchesToday && todayDue.getTime() > now.getTime())
+    ? todayDue.getTime()
+    : computeNextOccurrence(task, now.getTime());
+  return tsToDateStr(ts);
+}
+
 function resetRepeatTasks(appData) {
   const now = Date.now();
   let changed = false;
@@ -333,10 +396,10 @@ function resetRepeatTasks(appData) {
       if (nextAt <= now) {
         changed = true;
         const reset = { ...task, done: false, progress: 0, lastCompletedAt: null };
+        delete reset.overdueAlerted; // 新しい期限で超過アラートを再度有効に
         // 期限日つきの繰り返しタスクは期限を次回日付へ更新し、通知予約も再登録する
         if (task.dueDate) {
-          const d = new Date(nextAt);
-          reset.dueDate = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+          reset.dueDate = tsToDateStr(nextAt);
           if (reset.notify) toReschedule.push(reset);
         }
         return reset;
@@ -969,7 +1032,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
 
       {adding ? (
         <div style={{ marginTop: 10, padding: "14px 16px", backgroundColor: "var(--bg-card)", borderRadius: 14, display: "flex", flexDirection: "column", gap: 8, boxShadow: "var(--shadow)" }}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="目標名" autoFocus
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="目標名" autoFocus lang="ja"
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
           <DateInput value={date} onChange={setDate} style={{ borderRadius: 10 }} />
           <div style={{ display: "flex", gap: 8 }}>
@@ -1380,7 +1443,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
   return (
     <div>
       <input value={task.text} onChange={e => setTask({ ...task, text: e.target.value })}
-        placeholder="タスク名" autoFocus
+        placeholder="タスク名" autoFocus lang="ja"
         onKeyDown={e => { if (e.key === "Enter" && task.text.trim()) onSubmit(); }}
         style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12 }}
       />
@@ -1391,7 +1454,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
           e.target.style.height = e.target.scrollHeight + "px";
         }}
         onFocus={e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-        placeholder="メモ" rows={1}
+        placeholder="メモ" rows={1} lang="ja"
         style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none", resize: "none", boxSizing: "border-box", marginBottom: 14, overflow: "hidden" }}
       />
 
@@ -1416,6 +1479,27 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
             <TimeInput value={task.dueTime || ""} onChange={v => setTask({ ...task, dueTime: v })} />
           </div>
         </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          {!isRepeat && [{ label: "今日", d: 0 }, { label: "明日", d: 1 }, { label: "来週", d: 7 }].map(p => (
+            <button key={p.label} onClick={() => {
+              const t = new Date();
+              t.setDate(t.getDate() + p.d);
+              setTask({ ...task, dueDate: tsToDateStr(t.getTime()) });
+            }} style={{
+              padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
+              backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
+              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+            }}>{p.label}</button>
+          ))}
+          {["09:00", "12:00", "18:00", "21:00"].map(tm => (
+            <button key={tm} onClick={() => setTask({ ...task, dueTime: tm })} style={{
+              padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
+              backgroundColor: task.dueTime === tm ? ACCENT : "var(--bg-card)",
+              color: task.dueTime === tm ? "#fff" : "var(--text-secondary)",
+              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+            }}>{tm}</button>
+          ))}
+        </div>
       </div>
 
       <div style={{ marginBottom: 14 }}>
@@ -1425,7 +1509,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
           borderRadius: task.notify ? "12px 12px 0 0" : 12,
         }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Discord通知</span>
-          <button onClick={() => setTask({ ...task, notify: !task.notify, notifyTiming: task.notifyTiming || "on_time" })}
+          <button onClick={() => setTask({ ...task, notify: !task.notify, notifyTimings: getTaskTimings(task), notifyTiming: getTaskTimings(task)[0] })}
             style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: task.notify ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
             <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: task.notify ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
           </button>
@@ -1433,22 +1517,34 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
         {task.notify && (
           <div style={{ padding: "10px 16px", backgroundColor: "var(--bg-badge)", borderRadius: "0 0 12px 12px", borderTop: "1px solid var(--border)" }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {NOTIFY_OPTIONS.map(n => (
-                <button key={n.key} onClick={() => {
-                  if (n.key === "custom" && task.notifyTiming !== "custom") {
-                    setTask({ ...task, notifyTiming: "custom", notifyCustomMin: task.notifyCustomMin || 0 });
-                  } else {
-                    setTask({ ...task, notifyTiming: n.key });
-                  }
-                }} style={{
-                  padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
-                  fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-                  backgroundColor: task.notifyTiming === n.key ? ACCENT : "var(--bg-card)",
-                  color: task.notifyTiming === n.key ? "#fff" : "var(--text-secondary)",
-                }}>{n.label}</button>
-              ))}
+              {NOTIFY_OPTIONS.map(n => {
+                const timings = getTaskTimings(task);
+                const sel = timings.includes(n.key);
+                return (
+                  <button key={n.key} onClick={() => {
+                    let next;
+                    if (sel) {
+                      if (timings.length === 1) return; // 最低1つは残す
+                      next = timings.filter(k => k !== n.key);
+                    } else {
+                      next = [...timings, n.key];
+                    }
+                    const upd = { ...task, notifyTimings: next, notifyTiming: next[0] };
+                    if (n.key === "custom" && !sel) upd.notifyCustomMin = task.notifyCustomMin || 0;
+                    setTask(upd);
+                  }} style={{
+                    padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
+                    fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                    backgroundColor: sel ? ACCENT : "var(--bg-card)",
+                    color: sel ? "#fff" : "var(--text-secondary)",
+                  }}>{n.label}</button>
+                );
+              })}
             </div>
-            {task.notifyTiming === "custom" && (() => {
+            <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+              複数選択できます（例: 1日前＋ちょうど）
+            </p>
+            {getTaskTimings(task).includes("custom") && (() => {
               const min = parseInt(task.notifyCustomMin) || 0;
               const days = Math.floor(min / 1440);
               const hours = Math.floor((min % 1440) / 60);
@@ -1480,6 +1576,11 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
                 </div>
               );
             })()}
+            {!task.dueTime && (
+              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                ⏰ 時刻が未設定のため 9:00 を基準に通知します
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -1552,7 +1653,7 @@ function WelcomeScreen({ onCreateTab, onQuickAdd }) {
         <div style={{ flex: 1, height: 1, backgroundColor: "var(--border)" }} />
       </div>
 
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="タブ名を入力"
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="タブ名を入力" lang="ja"
         onKeyDown={e => { if (e.key === "Enter" && name.trim()) { onCreateTab(name.trim(), color); setName(""); } }}
         style={{ width: "100%", padding: "14px 18px", borderRadius: 14, border: "2px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 16, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12 }}
       />
@@ -1797,6 +1898,8 @@ function TodoApp() {
     const targetTabId = isAllView ? addToTabId : activeTabId;
     if (!newTask.text.trim() || !targetTabId) return;
     const task = { id: gid(), ...newTask, text: newTask.text.trim(), done: false, createdAt: Date.now() };
+    // 繰り返しタスクは次回発生日をdueDateに持たせる（通知予約と定時まとめに乗るように）
+    if (task.repeat && task.repeat !== "none") task.dueDate = nextOccurrenceDateStr(task);
     const newTabs = tabs.map(t => t.id === targetTabId ? { ...t, tasks: [...t.tasks, task] } : t);
     const newData = { ...appData, tabs: newTabs };
     updateData(newData);
@@ -1809,15 +1912,23 @@ function TodoApp() {
 
   const updateTask = () => {
     if (!editingTask || !editingTask.text.trim()) return;
+    const saved = { ...editingTask };
+    // 繰り返しタスクは次回発生日をdueDateに持たせる
+    if (saved.repeat && saved.repeat !== "none") saved.dueDate = nextOccurrenceDateStr(saved);
+    // 期限が変わったら超過アラート済みマークをクリア（新しい期限で再度アラート可能に）
+    const orig = tabs.flatMap(t => t.tasks).find(x => x.id === saved.id);
+    if (orig && (orig.dueDate !== saved.dueDate || orig.dueTime !== saved.dueTime)) {
+      delete saved.overdueAlerted;
+    }
     const newTabs = tabs.map(t => ({
       ...t,
-      tasks: t.tasks.map(x => x.id === editingTask.id ? { ...editingTask } : x),
+      tasks: t.tasks.map(x => x.id === saved.id ? { ...saved } : x),
     }));
     const newData = { ...appData, tabs: newTabs };
     updateData(newData);
     syncNow(newData);
-    cancelNotifyOnGAS(editingTask.id);
-    if (!editingTask.done) sendNotifyToGAS(editingTask);
+    cancelNotifyOnGAS(saved.id);
+    if (!saved.done) sendNotifyToGAS(saved);
     setEditingTask(null);
   };
 
@@ -2358,7 +2469,7 @@ function TodoApp() {
       </Modal>
 
       <Modal isOpen={showAddTab} onClose={() => { setShowAddTab(false); setNewTabName(""); }} title="タブを追加">
-        <input value={newTabName} onChange={e => setNewTabName(e.target.value)} placeholder="タブ名" autoFocus
+        <input value={newTabName} onChange={e => setNewTabName(e.target.value)} placeholder="タブ名" autoFocus lang="ja"
           onKeyDown={e => e.key === "Enter" && addTab()}
           style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 12 }}
         />
@@ -2454,7 +2565,7 @@ function TodoApp() {
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           placeholder="タスク名・メモで検索"
-          autoFocus
+          autoFocus lang="ja"
           style={{ width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 16 }}
         />
         {searchQuery.trim() && (() => {
@@ -2594,6 +2705,34 @@ function TodoApp() {
               </p>
             </div>
           )}
+
+          {USER_ID && (() => {
+            const alertOn = (appData.settings || {}).overdueAlert !== false;
+            const toggleAlert = () => {
+              const newData = { ...appData, settings: { ...(appData.settings || {}), overdueAlert: !alertOn } };
+              updateData(newData);
+              syncNow(newData);
+            };
+            return (
+              <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
+                  期限超過アラート
+                </div>
+                <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>期限を過ぎたら通知</span>
+                  <button onClick={toggleAlert} style={{
+                    width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
+                    backgroundColor: alertOn ? ACCENT : "var(--bg-checkbox)", position: "relative",
+                  }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: alertOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                  </button>
+                </div>
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                  時刻つきの期限が対象。期限を30分過ぎても未完了のタスクに1回だけ通知します。
+                </p>
+              </div>
+            );
+          })()}
 
           {USER_ID && (() => {
             const enabled = (appData.settings && appData.settings.notifyCategories) || DEFAULT_NOTIFY_CATEGORIES;
