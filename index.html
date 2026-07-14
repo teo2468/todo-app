@@ -323,6 +323,7 @@ function computeNextOccurrence(task, baseTs) {
 function resetRepeatTasks(appData) {
   const now = Date.now();
   let changed = false;
+  const toReschedule = [];
   const newTabs = (appData.tabs || []).map(tab => {
     const newTasks = tab.tasks.map(task => {
       if (!task.done) return task;
@@ -331,12 +332,20 @@ function resetRepeatTasks(appData) {
       const nextAt = computeNextOccurrence(task, task.lastCompletedAt);
       if (nextAt <= now) {
         changed = true;
-        return { ...task, done: false, progress: 0, lastCompletedAt: null };
+        const reset = { ...task, done: false, progress: 0, lastCompletedAt: null };
+        // 期限日つきの繰り返しタスクは期限を次回日付へ更新し、通知予約も再登録する
+        if (task.dueDate) {
+          const d = new Date(nextAt);
+          reset.dueDate = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+          if (reset.notify) toReschedule.push(reset);
+        }
+        return reset;
       }
       return task;
     });
     return { ...tab, tasks: newTasks };
   });
+  toReschedule.forEach(t => sendNotifyToGAS(t));
   return changed ? { ...appData, tabs: newTabs } : appData;
 }
 
@@ -352,8 +361,8 @@ function doSort(tasks, key, dir) {
   return [...tasks].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     if (key === "priority") {
-      const pa = (PRIORITIES.find(p => p.key === (a.priority || "none")) || {}).sort || 4;
-      const pb = (PRIORITIES.find(p => p.key === (b.priority || "none")) || {}).sort || 4;
+      const pa = (PRIORITIES.find(p => p.key === (a.priority || "none")) || {}).sort ?? 4;
+      const pb = (PRIORITIES.find(p => p.key === (b.priority || "none")) || {}).sort ?? 4;
       return (pa - pb) * d;
     }
     if (key === "progress") return ((a.progress || 0) - (b.progress || 0)) * d;
@@ -725,7 +734,7 @@ function CountdownReminderPanel({ reminder, onChange }) {
   return (
     <div style={{ padding: "14px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: r.enabled ? 16 : 0 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>LINE リマインド</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Discord リマインド</span>
         <button onClick={() => onChange({ ...r, enabled: !r.enabled })} style={{
           width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
           backgroundColor: r.enabled ? ACCENT : "var(--bg-checkbox)", position: "relative",
@@ -1415,7 +1424,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
           padding: "12px 16px", backgroundColor: "var(--bg-badge)",
           borderRadius: task.notify ? "12px 12px 0 0" : 12,
         }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>LINE通知</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Discord通知</span>
           <button onClick={() => setTask({ ...task, notify: !task.notify, notifyTiming: task.notifyTiming || "on_time" })}
             style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: task.notify ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
             <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: task.notify ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
@@ -2536,7 +2545,7 @@ function TodoApp() {
           {USER_ID && (
             <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
-                LINE 定時通知
+                Discord 定時通知
               </div>
 
               <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 8 }}>
@@ -2607,7 +2616,7 @@ function TodoApp() {
                   定時通知の内容
                 </div>
                 <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 10px", lineHeight: 1.5 }}>
-                  含めるカテゴリ（順序は固定）。LINE「タスク」コマンドにも反映されます。
+                  含めるカテゴリ（順序は固定）。
                 </p>
                 <div style={{ padding: "10px 12px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                   {NOTIFY_CATEGORIES.map(c => {
@@ -2655,43 +2664,6 @@ function TodoApp() {
               </div>
             );
           })()}
-
-          {USER_ID && (
-            <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
-                LINE コマンド
-              </div>
-              <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 12px", lineHeight: 1.6 }}>
-                LINEのトーク画面で以下のメッセージを送ると操作できます。
-              </p>
-              <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 8px" }}>
-                ひらがなでもOK（例: たすく / きょう / こまんど）
-              </p>
-              <div style={{ padding: "12px 14px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8, fontSize: 13, lineHeight: 1.5 }}>
-                {[
-                  ["タスク", "未完了タスクを一覧表示（個別送信）"],
-                  ["今日", "今日が期限 + 期限切れを一覧表示"],
-                  ["通知", "定時通知の設定と内容をプレビュー"],
-                  ["リンク", "アプリのURLを表示"],
-                  ["コマンド", "このコマンド一覧を表示"],
-                ].map(([cmd, desc]) => (
-                  <div key={cmd} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-                    <span style={{
-                      fontFamily: "monospace", fontWeight: 700, color: ACCENT,
-                      backgroundColor: ACCENT + "18", padding: "2px 8px", borderRadius: 6,
-                      fontSize: 12, flexShrink: 0, whiteSpace: "nowrap",
-                    }}>{cmd}</span>
-                    <span style={{ color: "var(--text-secondary)" }}>{desc}</span>
-                  </div>
-                ))}
-                <div style={{ paddingTop: 8, marginTop: 4, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
-                  💡 タスク通知に引用返信で：<br />
-                  ・「<span style={{ fontFamily: "monospace", fontWeight: 600 }}>完了</span>」→ そのタスクを完了<br />
-                  ・「<span style={{ fontFamily: "monospace", fontWeight: 600 }}>30分後</span>」「<span style={{ fontFamily: "monospace", fontWeight: 600 }}>1時間後</span>」「<span style={{ fontFamily: "monospace", fontWeight: 600 }}>1日後</span>」など → 再通知（スヌーズ）
-                </div>
-              </div>
-            </div>
-          )}
 
           <div style={{ marginTop: 4, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>
             <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) }))); setShowSettings(false); }} style={{
