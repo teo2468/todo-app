@@ -886,51 +886,142 @@ function daysBetween(startStr, endStr) {
 }
 
 function DateCalculator() {
+  const [mode, setMode] = useState("between"); // between: 期間の日数 / offset: ◯日前後の日付
   const [calcStart, setCalcStart] = useState("");
   const [calcEnd, setCalcEnd] = useState("");
   const calcDays = daysBetween(calcStart, calcEnd);
 
+  const [baseDate, setBaseDate] = useState(tsToDateStr(Date.now()));
+  const [offsetDays, setOffsetDays] = useState("");
+  const [offsetDir, setOffsetDir] = useState("after"); // after | before
+
+  const offsetNum = parseInt(offsetDays, 10);
+  let offsetResult = null;
+  if (baseDate && !isNaN(offsetNum) && offsetNum >= 0) {
+    const d = new Date(baseDate + "T00:00:00");
+    if (!isNaN(d.getTime())) {
+      d.setDate(d.getDate() + (offsetDir === "after" ? offsetNum : -offsetNum));
+      offsetResult = d;
+    }
+  }
+
+  const modeBtn = (key, label) => (
+    <button onClick={() => setMode(key)} style={{
+      flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
+      backgroundColor: mode === key ? ACCENT : "var(--bg-badge)",
+      color: mode === key ? "#fff" : "var(--text-secondary)",
+      fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+    }}>{label}</button>
+  );
+
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4 }}>開始日</div>
-          <DateInput value={calcStart} onChange={setCalcStart} />
-        </div>
-        <div style={{ paddingTop: 22, fontSize: 18, color: "var(--text-tertiary)", fontWeight: 300 }}>→</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>終了日</div>
-            <button onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
-              background: "none", border: "none", cursor: "pointer", padding: "2px 4px",
-              color: "var(--text-tertiary)", fontSize: 13, lineHeight: 1,
-            }} title="入れ替え">⇔</button>
-          </div>
-          <DateInput value={calcEnd} onChange={setCalcEnd} />
-        </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {modeBtn("between", "期間の日数")}
+        {modeBtn("offset", "◯日前後の日付")}
       </div>
 
-      {calcDays !== null && (
-        <div style={{
-          marginTop: 14, padding: "14px 16px", borderRadius: 12,
-          backgroundColor: calcDays < 0 ? "#FEE2E2" : calcDays === 0 ? "#DCFCE7" : "var(--bg-badge)",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
-            {calcStart && calcEnd
-              ? new Date(calcStart + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
-                + " 〜 "
-                + new Date(calcEnd + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
-              : ""}
-          </span>
-          <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "#EF4444" : calcDays === 0 ? "#22C55E" : ACCENT }}>
-            {calcDays < 0 ? calcDays + "日" : calcDays === 0 ? "同じ日" : calcDays + "日間"}
-          </span>
+      {mode === "between" ? (
+        <div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4 }}>開始日</div>
+              <DateInput value={calcStart} onChange={setCalcStart} />
+            </div>
+            <div style={{ paddingTop: 22, fontSize: 18, color: "var(--text-tertiary)", fontWeight: 300 }}>→</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>終了日</div>
+                <button onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
+                  background: "none", border: "none", cursor: "pointer", padding: "2px 4px",
+                  color: "var(--text-tertiary)", fontSize: 13, lineHeight: 1,
+                }} title="入れ替え">⇔</button>
+              </div>
+              <DateInput value={calcEnd} onChange={setCalcEnd} />
+            </div>
+          </div>
+
+          {calcDays !== null && (
+            <div style={{
+              marginTop: 14, padding: "14px 16px", borderRadius: 12,
+              backgroundColor: calcDays < 0 ? "#FEE2E2" : calcDays === 0 ? "#DCFCE7" : "var(--bg-badge)",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+                {calcStart && calcEnd
+                  ? new Date(calcStart + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
+                    + " 〜 "
+                    + new Date(calcEnd + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
+                  : ""}
+              </span>
+              <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "#EF4444" : calcDays === 0 ? "#22C55E" : ACCENT }}>
+                {calcDays < 0 ? calcDays + "日" : calcDays === 0 ? "同じ日" : calcDays + "日間"}
+              </span>
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "10px 0 0", lineHeight: 1.5 }}>
+            開始日と終了日の間の日数を計算します。終了日が過去の日付だとマイナスで表示されます。
+          </p>
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", marginBottom: 4 }}>基準日</div>
+          <DateInput value={baseDate} onChange={setBaseDate} />
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+            <input
+              type="number" min="0" inputMode="numeric" value={offsetDays}
+              onChange={e => setOffsetDays(e.target.value)}
+              placeholder="0"
+              style={{
+                width: 90, padding: "10px 12px", borderRadius: 12,
+                border: "1px solid var(--border)", backgroundColor: "var(--bg-input)",
+                color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit",
+                outline: "none", textAlign: "center",
+              }}
+            />
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)" }}>日</span>
+            <div style={{ display: "flex", gap: 4, flex: 1 }}>
+              {[["after", "後"], ["before", "前"]].map(([key, label]) => (
+                <button key={key} onClick={() => setOffsetDir(key)} style={{
+                  flex: 1, padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
+                  backgroundColor: offsetDir === key ? ACCENT : "var(--bg-badge)",
+                  color: offsetDir === key ? "#fff" : "var(--text-secondary)",
+                  fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                }}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {[7, 14, 30, 60, 90, 100].map(n => (
+              <button key={n} onClick={() => setOffsetDays(String(n))} style={{
+                padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
+                backgroundColor: offsetDays === String(n) ? ACCENT : "var(--bg-card)",
+                color: offsetDays === String(n) ? "#fff" : "var(--text-secondary)",
+                fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+              }}>{n}日</button>
+            ))}
+          </div>
+
+          {offsetResult && (
+            <div style={{
+              marginTop: 14, padding: "14px 16px", borderRadius: 12,
+              backgroundColor: "var(--bg-badge)",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+                {new Date(baseDate + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
+                  + " の " + offsetNum + "日" + (offsetDir === "after" ? "後" : "前")}
+              </span>
+              <span style={{ fontSize: 20, fontWeight: 900, color: ACCENT }}>
+                {offsetResult.toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
+              </span>
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "10px 0 0", lineHeight: 1.5 }}>
+            基準日から指定日数だけ後（または前）の日付を計算します。基準日は今日が初期値です。
+          </p>
         </div>
       )}
-      <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "10px 0 0", lineHeight: 1.5 }}>
-        開始日と終了日の間の日数を計算します。終了日が過去の日付だとマイナスで表示されます。
-      </p>
     </div>
   );
 }
