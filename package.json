@@ -1,0 +1,7 @@
+{
+  "name": "todo-app",
+  "private": true,
+  "dependencies": {
+    "@vercel/functions": "^2.0.0"
+  }
+}

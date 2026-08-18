@@ -496,6 +496,37 @@ function useStorage() {
     }
   }, []);
 
+  // Discord側の完了/スヌーズ操作を取り込む: フォーカス時、未送信のローカル編集がなければ
+  // クラウドの方が新しい場合だけ静かに差し替える（巻き戻り対策）
+  useEffect(() => {
+    if (!USER_ID) return;
+    const pullIfNewer = async () => {
+      if (debounceRef.current) return; // ローカル編集の未送信分を上書きしない
+      try {
+        const res = await fetch(`${GAS_URL}?action=load&userId=${USER_ID}`);
+        const json = await res.json();
+        if (json.data && json.updatedAt && (!localUpdatedAtRef.current || json.updatedAt > localUpdatedAtRef.current)) {
+          const parsed = JSON.parse(json.data);
+          setAppData(parsed);
+          latestDataRef.current = parsed;
+          localUpdatedAtRef.current = json.updatedAt;
+          try {
+            localStorage.setItem("todo-app-v6", JSON.stringify(parsed));
+            localStorage.setItem("todo-app-v6-updatedAt", json.updatedAt);
+          } catch (e) {}
+        }
+      } catch (e) {}
+    };
+    const onFocus = () => pullIfNewer();
+    const onVis = () => { if (document.visibilityState === "visible") pullIfNewer(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
   const syncToGAS = useCallback((data) => {
     if (!USER_ID) return;
     fetch(GAS_URL, {

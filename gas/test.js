@@ -10,6 +10,18 @@ function testChannelNotify() {
   Logger.log(msgId ? '送信成功 messageId=' + msgId : '送信失敗（ログを確認）');
 }
 
+// スラッシュコマンド（/today /tasks /cleanup）をDiscordに登録する。
+// Vercelの/api/register-commandsをrelay secret付きで叩く。登録内容を変えたときに再実行すればよい
+function registerDiscordCommands() {
+  const res = UrlFetchApp.fetch('https://todo-app-tawny-iota-98.vercel.app/api/register-commands', {
+    method: 'post',
+    headers: { 'x-relay-secret': PropertiesService.getScriptProperties().getProperty('DISCORD_RELAY_SECRET') },
+    muteHttpExceptions: true,
+  });
+  Logger.log(res.getResponseCode());
+  Logger.log(res.getContentText());
+}
+
 function testDiscordRelay() {
   const res = UrlFetchApp.fetch('https://todo-app-tawny-iota-98.vercel.app/api/discord/send', {
     method: 'post',

@@ -1,7 +1,7 @@
 // ============================================
-// ToDo アプリ GAS コード v10
+// ToDo アプリ GAS コード v11
 // 通知基盤: Discord（Vercel中継 /api/discord/send 経由）
-// v10: チャンネル通知対応・複数通知タイミング・期限超過アラート
+// v11: 通知ボタン（完了/スヌーズ）・Discord操作アクション・スラッシュコマンド対応
 // ============================================
 const SPREADSHEET_ID = '1lIYGcsu_XWzweXHj82M4QM2pCoSLtSiFsBj5hLfzNkg';
 const APP_URL = 'https://todo-app-tawny-iota-98.vercel.app';
@@ -125,12 +125,16 @@ function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
     switch (body.action) {
-      case 'notify':       return handleNotify(body);
-      case 'cancel':       return handleCancel(body);
-      case 'sync':         return handleSync(body);
-      case 'saveSettings': return handleSaveSettings(body);
-      case 'resetData':    return handleResetData(body);
-      default:             return ContentService.createTextOutput('unknown action');
+      case 'notify':          return handleNotify(body);
+      case 'cancel':          return handleCancel(body);
+      case 'sync':            return handleSync(body);
+      case 'saveSettings':    return handleSaveSettings(body);
+      case 'resetData':       return handleResetData(body);
+      // Discord interactions（Vercel /api/interactions から。secret検証あり）
+      case 'discordComplete': return handleDiscordComplete(body);
+      case 'discordSnooze':   return handleDiscordSnooze(body);
+      case 'discordCommand':  return handleDiscordCommand(body);
+      default:                return ContentService.createTextOutput('unknown action');
     }
   } catch (err) {
     return ContentService.createTextOutput('error: ' + err.message);
@@ -272,6 +276,204 @@ function handleResetData(body) {
 }
 
 // ============================================
+// Discord interactions アクション
+// Vercel /api/interactions からbody.secret（DISCORD_RELAY_SECRET）付きで呼ばれる
+// ============================================
+function checkRelaySecret(body) {
+  const secret = PropertiesService.getScriptProperties().getProperty('DISCORD_RELAY_SECRET');
+  return !!secret && body.secret === secret;
+}
+
+// 通知メッセージに付けるボタン行
+function taskButtons(userId, taskId) {
+  return [{
+    type: 1,
+    components: [
+      { type: 2, style: 3, label: '✅ 完了',   custom_id: 'done:' + userId + ':' + taskId },
+      { type: 2, style: 2, label: '+30分',    custom_id: 'snz:30:' + userId + ':' + taskId },
+      { type: 2, style: 2, label: '+1時間',   custom_id: 'snz:60:' + userId + ':' + taskId },
+      { type: 2, style: 2, label: '今夜21時', custom_id: 'tonight:' + userId + ':' + taskId },
+    ],
+  }];
+}
+
+function deleteNotificationRows(ss, userId, taskId) {
+  const sheet = ss.getSheetByName(SHEET_NOTIFICATIONS);
+  if (!sheet) return;
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][0] === userId && data[i][1] === taskId) sheet.deleteRow(i + 1);
+  }
+}
+
+function handleDiscordComplete(body) {
+  if (!checkRelaySecret(body)) return jsonResponse({ ok: false, error: 'unauthorized' });
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); }
+  catch (e) { return jsonResponse({ ok: false, error: 'busy' }); }
+
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const syncSheet = ss.getSheetByName(SHEET_SYNC);
+    if (!syncSheet) return jsonResponse({ ok: false, error: 'no_data' });
+
+    const syncData = syncSheet.getDataRange().getValues();
+    for (let i = 1; i < syncData.length; i++) {
+      if (syncData[i][0] !== body.userId) continue;
+      let appData;
+      try { appData = JSON.parse(syncData[i][1]); }
+      catch (e) { return jsonResponse({ ok: false, error: 'broken_data' }); }
+
+      const task = findTask(appData, body.taskId);
+      if (!task) return jsonResponse({ ok: false, error: 'task_not_found' });
+
+      task.done = true;
+      task.progress = 100;
+      if (task.repeat && task.repeat !== 'none') task.lastCompletedAt = Date.now();
+
+      syncSheet.getRange(i + 1, 2).setValue(JSON.stringify(appData));
+      syncSheet.getRange(i + 1, 3).setValue(new Date().toISOString());
+      deleteNotificationRows(ss, body.userId, body.taskId);
+      return jsonResponse({ ok: true, taskName: task.text });
+    }
+    return jsonResponse({ ok: false, error: 'user_not_found' });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleDiscordSnooze(body) {
+  if (!checkRelaySecret(body)) return jsonResponse({ ok: false, error: 'unauthorized' });
+  const minutes = parseInt(body.minutes, 10);
+  if (!minutes || minutes <= 0) return jsonResponse({ ok: false, error: 'bad_minutes' });
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); }
+  catch (e) { return jsonResponse({ ok: false, error: 'busy' }); }
+
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const appData = getAppData(ss, body.userId);
+    const task = findTask(appData, body.taskId);
+    if (!task) return jsonResponse({ ok: false, error: 'task_not_found' });
+    if (task.done) return jsonResponse({ ok: false, error: 'already_done' });
+
+    const notifyAt = new Date(Date.now() + minutes * 60 * 1000);
+    const sheet = getOrCreateSheet(ss, SHEET_NOTIFICATIONS, ['userId', 'taskId', 'taskName', 'notifyAt']);
+    deleteNotificationRows(ss, body.userId, body.taskId);
+    sheet.appendRow([body.userId, body.taskId, task.text, notifyAt.toISOString()]);
+    return jsonResponse({ ok: true, taskName: task.text, notifyAt: notifyAt.toISOString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleDiscordCommand(body) {
+  if (!checkRelaySecret(body)) return jsonResponse({ ok: false, error: 'unauthorized' });
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const uSheet = ss.getSheetByName(SHEET_USERS);
+  if (!uSheet) return jsonResponse({ ok: false, error: 'no_users' });
+  const users = uSheet.getDataRange().getValues();
+  if (users.length < 2) return jsonResponse({ ok: false, error: 'no_users' });
+  const userId = users[1][COL_USER_ID]; // 実質単一ユーザー運用: 先頭行を使う
+
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+
+  if (body.command === 'cleanup') {
+    const lock = LockService.getScriptLock();
+    try { lock.waitLock(10000); }
+    catch (e) { return jsonResponse({ ok: false, error: 'busy' }); }
+    try {
+      const syncSheet = ss.getSheetByName(SHEET_SYNC);
+      if (!syncSheet) return jsonResponse({ ok: false, error: 'no_data' });
+      const syncData = syncSheet.getDataRange().getValues();
+      for (let i = 1; i < syncData.length; i++) {
+        if (syncData[i][0] !== userId) continue;
+        let appData;
+        try { appData = JSON.parse(syncData[i][1]); }
+        catch (e) { return jsonResponse({ ok: false, error: 'broken_data' }); }
+        let count = 0;
+        (appData.tabs || []).forEach((tab) => {
+          const keep = [];
+          (tab.tasks || []).forEach((t) => { if (t.done) count++; else keep.push(t); });
+          tab.tasks = keep;
+        });
+        if (count > 0) {
+          syncSheet.getRange(i + 1, 2).setValue(JSON.stringify(appData));
+          syncSheet.getRange(i + 1, 3).setValue(new Date().toISOString());
+        }
+        return jsonResponse({ ok: true, content: '🗑 完了済みタスクを ' + count + '件 削除しました', embeds: [] });
+      }
+      return jsonResponse({ ok: false, error: 'user_not_found' });
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  const appData = getAppData(ss, userId);
+  if (!appData) return jsonResponse({ ok: false, error: 'no_data' });
+
+  if (body.command === 'today') {
+    const overdue = [], todayTasks = [];
+    (appData.tabs || []).forEach((tab) => {
+      (tab.tasks || []).forEach((task) => {
+        if (task.done) return;
+        if (task.dueDate && task.dueDate < today) overdue.push({ task, tabName: tab.name });
+        else if (task.dueDate === today) todayTasks.push({ task, tabName: tab.name });
+      });
+    });
+    const total = overdue.length + todayTasks.length;
+    if (total === 0) {
+      return jsonResponse({ ok: true, content: '✨ 今日が期限・期限切れのタスクはありません！', embeds: [] });
+    }
+    const sections = [];
+    if (overdue.length) {
+      sections.push('⚠️ **期限切れ（' + overdue.length + '件）**\n'
+        + overdue.map((e) => '・' + formatTaskLine(e.task, today, { tabName: e.tabName })).join('\n'));
+    }
+    if (todayTasks.length) {
+      sections.push('📅 **今日が期限（' + todayTasks.length + '件）**\n'
+        + todayTasks.map((e) => '・' + formatTaskLine(e.task, today, { context: 'today', tabName: e.tabName })).join('\n'));
+    }
+    return jsonResponse({
+      ok: true,
+      content: '📅 今日のタスク（' + total + '件）',
+      embeds: [{ description: sections.join('\n\n'), color: overdue.length ? COLOR_URGENT : COLOR_DEFAULT }],
+    });
+  }
+
+  if (body.command === 'tasks') {
+    const MAX_LINES = 30;
+    let total = 0;
+    const sections = [];
+    let lines = 0;
+    (appData.tabs || []).forEach((tab) => {
+      const undone = (tab.tasks || []).filter((t) => !t.done);
+      total += undone.length;
+      if (!undone.length || lines >= MAX_LINES) return;
+      const take = undone.slice(0, MAX_LINES - lines);
+      lines += take.length;
+      sections.push('**' + tab.name + '（' + undone.length + '件）**\n'
+        + take.map((t) => '・' + formatTaskLine(t, today, {})).join('\n'));
+    });
+    if (total === 0) {
+      return jsonResponse({ ok: true, content: '✨ 未完了のタスクはありません！', embeds: [] });
+    }
+    let desc = sections.join('\n\n');
+    if (total > lines) desc += '\n\n…他 ' + (total - lines) + '件はアプリで確認してください';
+    return jsonResponse({
+      ok: true,
+      content: '📋 未完了タスク（' + total + '件）',
+      embeds: [{ description: desc, color: COLOR_DEFAULT }],
+    });
+  }
+
+  return jsonResponse({ ok: false, error: 'unknown_command' });
+}
+
+// ============================================
 // 定期トリガー本体
 // ============================================
 function checkAndNotify() {
@@ -334,6 +536,7 @@ function checkTaskNotifications(ss) {
     const msgId = sendDiscordMessage({
       content: '🔔 ' + (task.text || taskName) + ' の時間です',
       embeds: [buildTaskEmbed(task, today, tabName)],
+      components: taskButtons(userId, taskId),
     });
     // 送信失敗時は行を残して次回トリガーで再試行（古くなればSTALEで破棄される）
     if (msgId) rowsToDelete.push(i + 1);
@@ -460,6 +663,7 @@ function checkOverdueAlerts(ss) {
   const syncData = syncSheet.getDataRange().getValues();
 
   for (let j = 1; j < syncData.length; j++) {
+    const alertUserId = syncData[j][0];
     let appData;
     try { appData = JSON.parse(syncData[j][1]); } catch (e) { continue; }
 
@@ -483,6 +687,7 @@ function checkOverdueAlerts(ss) {
           sendDiscordMessage({
             content: '⏰ 期限を過ぎています: ' + task.text,
             embeds: [embed],
+            components: taskButtons(alertUserId, task.id),
           });
         }
         task.overdueAlerted = now.toISOString();
