@@ -14,7 +14,7 @@
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #F0F2F5; font-family: 'Noto Sans JP', sans-serif; }
+    body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
   </style>
 </head>
@@ -32,7 +32,7 @@ const TAB_COLORS = [
   { value: "#F97316", light: "#FFEDD5", dark: "#5B2E0E" },
   { value: "#EAB308", light: "#FEF9C3", dark: "#4B3B0A" },
   { value: "#22C55E", light: "#DCFCE7", dark: "#1A3B2A" },
-  { value: "#14B8A6", light: "#CCFBF1", dark: "#1A3B35" },
+  { value: "var(--accent)", light: "#CCFBF1", dark: "#1A3B35" },
   { value: "#64748B", light: "#F1F5F9", dark: "#2A2F38" },
 ];
 
@@ -196,7 +196,7 @@ function sendSaveSettingsToGAS(settings) {
   }).catch(() => {});
 }
 
-const ACCENT = "#3B82F6";
+const ACCENT = "var(--accent)";
 const ALL_TAB = "__all__";
 const COUNTDOWN_TAB = "__countdown__";
 const gid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -725,7 +725,7 @@ function DateInput({ value, onChange, style }) {
         <div style={{
           marginTop: 4, padding: "5px 10px", borderRadius: 8,
           backgroundColor: ACCENT, display: "inline-flex", alignItems: "center", gap: 4,
-          fontSize: 13, fontWeight: 700, color: "#fff",
+          fontSize: 13, fontWeight: 700, color: "var(--accent-text)",
           letterSpacing: "0.06em",
         }}>
           {typing}
@@ -769,7 +769,7 @@ function Modal({ isOpen, onClose, title, children, footer }) {
 }
 
 function CheckIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
 }
 
 function EditIcon() {
@@ -781,11 +781,11 @@ function TrashIcon() {
 }
 
 function AppIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>;
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>;
 }
 
 function PlusIcon() {
-  return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
+  return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
 }
 
 function SunIcon() {
@@ -831,7 +831,7 @@ function CountdownReminderPanel({ reminder, onChange }) {
         <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Discord リマインド</span>
         <button onClick={() => onChange({ ...r, enabled: !r.enabled })} style={{
           width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-          backgroundColor: r.enabled ? ACCENT : "var(--bg-checkbox)", position: "relative",
+          backgroundColor: r.enabled ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
         }}>
           <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: r.enabled ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
         </button>
@@ -940,7 +940,7 @@ function DateCalculator() {
     <button onClick={() => setMode(key)} style={{
       flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
       backgroundColor: mode === key ? ACCENT : "var(--bg-badge)",
-      color: mode === key ? "#fff" : "var(--text-secondary)",
+      color: mode === key ? "var(--accent-text)" : "var(--text-secondary)",
       fontSize: 13, fontWeight: 600, fontFamily: "inherit",
     }}>{label}</button>
   );
@@ -1016,7 +1016,7 @@ function DateCalculator() {
                 <button key={key} onClick={() => setOffsetDir(key)} style={{
                   flex: 1, padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
                   backgroundColor: offsetDir === key ? ACCENT : "var(--bg-badge)",
-                  color: offsetDir === key ? "#fff" : "var(--text-secondary)",
+                  color: offsetDir === key ? "var(--accent-text)" : "var(--text-secondary)",
                   fontSize: 13, fontWeight: 600, fontFamily: "inherit",
                 }}>{label}</button>
               ))}
@@ -1027,7 +1027,7 @@ function DateCalculator() {
               <button key={n} onClick={() => setOffsetDays(String(n))} style={{
                 padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
                 backgroundColor: offsetDays === String(n) ? ACCENT : "var(--bg-card)",
-                color: offsetDays === String(n) ? "#fff" : "var(--text-secondary)",
+                color: offsetDays === String(n) ? "var(--accent-text)" : "var(--text-secondary)",
                 fontSize: 12, fontWeight: 600, fontFamily: "inherit",
               }}>{n}日</button>
             ))}
@@ -1123,8 +1123,8 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
             <div key={cd.id} style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
               padding: "14px 16px", backgroundColor: "var(--bg-card)",
-              borderRadius: 14, borderLeft: "4px solid " + color,
-              boxShadow: "var(--shadow)",
+              borderRadius: 14,
+              border: "1px solid var(--border)", borderLeftWidth: 3, borderLeftColor: color,
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}>
@@ -1153,7 +1153,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
       </div>
 
       {adding ? (
-        <div style={{ marginTop: 10, padding: "14px 16px", backgroundColor: "var(--bg-card)", borderRadius: 14, display: "flex", flexDirection: "column", gap: 8, boxShadow: "var(--shadow)" }}>
+        <div style={{ marginTop: 10, padding: "14px 16px", backgroundColor: "var(--bg-card)", borderRadius: 14, display: "flex", flexDirection: "column", gap: 8, border: "1px solid var(--border)" }}>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="目標名" autoFocus lang="ja"
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
           <DateInput value={date} onChange={setDate} style={{ borderRadius: 10 }} />
@@ -1161,7 +1161,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
             <button onClick={handleAdd} disabled={!name.trim() || !date} style={{
               flex: 1, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
               backgroundColor: (name.trim() && date) ? ACCENT : "var(--bg-badge)",
-              color: (name.trim() && date) ? "#fff" : "var(--text-tertiary)",
+              color: (name.trim() && date) ? "var(--accent-text)" : "var(--text-tertiary)",
               fontSize: 13, fontWeight: 700, fontFamily: "inherit",
             }}>追加</button>
             <button onClick={() => setAdding(false)} style={{
@@ -1207,7 +1207,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
                 <button onClick={saveEdit} disabled={!editingCd.name.trim() || !editingCd.date} style={{
                   flex: 1, padding: "12px", borderRadius: 12, border: "none", cursor: "pointer",
                   backgroundColor: (editingCd.name.trim() && editingCd.date) ? ACCENT : "var(--bg-badge)",
-                  color: (editingCd.name.trim() && editingCd.date) ? "#fff" : "var(--text-tertiary)",
+                  color: (editingCd.name.trim() && editingCd.date) ? "var(--accent-text)" : "var(--text-tertiary)",
                   fontSize: 14, fontWeight: 700, fontFamily: "inherit",
                 }}>保存</button>
                 <button onClick={() => setEditingCd(null)} style={{
@@ -1262,10 +1262,10 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
 
   const priObj = PRIORITIES.find(x => x.key === (task.priority || "none"));
 
-  const fillColor = ts.main + "28";
-  const cardBg = !task.done && progress > 0
-    ? `linear-gradient(to right, ${fillColor} ${progress}%, var(--bg-card) ${progress}%)`
-    : "var(--bg-card)";
+  // 左端の細バー: 期限切れ > 緊急/高優先度 のときだけ色を出す
+  const barColor = !task.done && overdue ? "var(--danger)"
+    : (!task.done && priObj && (priObj.key === "urgent" || priObj.key === "high")) ? priObj.color
+    : null;
 
   const [swipeX, setSwipeX] = useState(0);
   const [dragMode, setDragMode] = useState(false); // mobile long-press drag
@@ -1352,7 +1352,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
       onDragOver={(e) => { e.preventDefault(); onReorderDragOver && onReorderDragOver(task.id); }}
       onDrop={(e) => { e.preventDefault(); onReorderDrop && onReorderDrop(); }}
       onDragEnd={() => onReorderDragEnd && onReorderDragEnd()}
-      style={{ position: "relative", marginBottom: 4, borderRadius: 16, overflow: "hidden", opacity: isDragging ? 0.4 : 1, transform: dragMode ? "scale(1.02)" : "scale(1)", transition: "opacity 0.15s, transform 0.15s", boxShadow: dragMode ? "0 8px 24px rgba(0,0,0,0.2)" : "none" }}>
+      style={{ position: "relative", marginBottom: 0, borderRadius: 0, overflow: "hidden", opacity: isDragging ? 0.4 : 1, transform: dragMode ? "scale(1.01)" : "scale(1)", transition: "opacity 0.15s, transform 0.15s", boxShadow: dragMode ? "0 8px 24px rgba(0,0,0,0.2)" : "none" }}>
       {isDragOver && (
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, backgroundColor: ACCENT, borderRadius: 2, zIndex: 3 }} />
       )}
@@ -1367,77 +1367,79 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{
-          display: "flex", alignItems: "flex-start", gap: 14, padding: sz.padY + "px " + sz.padX + "px",
-          background: cardBg, borderRadius: 16,
-          borderLeft: "3px solid " + ts.main,
-          opacity: task.done ? 0.45 : 1, position: "relative",
+          display: "flex", alignItems: "flex-start", gap: 13, padding: sz.padY + "px " + sz.padX + "px",
+          background: "var(--bg-main)", borderRadius: 0,
+          borderLeft: "3px solid " + (barColor || "transparent"),
+          borderBottom: "1px solid var(--row-border)",
+          opacity: task.done ? 0.55 : 1, position: "relative",
           transition: swipeX === 0 ? "background 0.3s, transform 0.2s" : "none",
           transform: "translateX(" + swipeX + "px)",
           cursor: "pointer",
           userSelect: "none", WebkitUserSelect: "none", touchAction: "pan-y",
         }}>
         <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }} style={{
-          width: sz.checkSize, height: sz.checkSize, minWidth: sz.checkSize, borderRadius: 8, border: "none",
-          cursor: "pointer", backgroundColor: task.done ? ts.main : "var(--bg-checkbox)",
+          width: sz.checkSize, height: sz.checkSize, minWidth: sz.checkSize, borderRadius: 6,
+          border: task.done ? "1.5px solid var(--accent)" : "1.5px solid var(--check-border)",
+          cursor: "pointer", backgroundColor: task.done ? "var(--accent)" : "transparent",
+          color: "var(--accent-text)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          marginTop: 1, position: "relative", zIndex: 1,
-          boxShadow: task.done ? "0 2px 8px " + ts.main + "40" : "inset 0 1px 3px rgba(0,0,0,0.1)",
+          marginTop: 2, position: "relative", zIndex: 1,
         }}>
           {task.done && <CheckIcon />}
         </button>
 
         <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
-            {!isRepeat && priObj && priObj.key !== "none" && (
-              <span style={{
-                display: "inline-flex", alignItems: "center", gap: 3, fontSize: sz.badgeFont,
-                fontWeight: 700, color: priObj.color, backgroundColor: priObj.bg,
-                padding: "2px 8px", borderRadius: 6, marginRight: 4,
-              }}>{priObj.icon} {priObj.label}</span>
-            )}
-            <span style={{
-              fontSize: sz.font, lineHeight: 1.5, color: "var(--text-primary)", fontWeight: 500,
-              textDecoration: task.done ? "line-through" : "none", wordBreak: "break-word",
-            }}>{task.text}</span>
-          </div>
+          <span style={{
+            fontSize: sz.font, lineHeight: 1.5, fontWeight: 600,
+            color: task.done ? "var(--text-tertiary)" : "var(--text-primary)",
+            textDecoration: task.done ? "line-through" : "none", wordBreak: "break-word",
+            display: "block",
+          }}>{task.text}</span>
 
           {task.memo && (
-            <p style={{ margin: "4px 0 0", fontSize: sz.memoFont, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
+            <p style={{ margin: "3px 0 0", fontSize: sz.memoFont, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
           )}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6, minHeight: Math.round(sz.badgeFont * 1.7) }}>
-            {showTabName && task._tabName && (
-              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: ts.main, backgroundColor: ts.main + "18", padding: "2px 8px", borderRadius: 6 }}>{task._tabName}</span>
-            )}
-            {!task.done && progress > 0 && (
-              <span style={{
-                fontSize: sz.badgeFont, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
-                color: progress === 100 ? "#15803D" : ts.main,
-                backgroundColor: progress === 100 ? "#DCFCE7" : ts.main + "22",
-              }}>{progress}%</span>
-            )}
-            {rl && (
-              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "#14B8A6", backgroundColor: "#CCFBF1", padding: "2px 8px", borderRadius: 6 }}>{rl}</span>
-            )}
+          <div style={{ display: "flex", alignItems: "center", gap: 11, flexWrap: "wrap", marginTop: 4, minHeight: Math.round(sz.badgeFont * 1.5) }}>
             {task.dueDate && (
               <span style={{
-                fontSize: sz.badgeFont, fontWeight: 600,
-                color: overdue ? "#EF4444" : "var(--text-tertiary)",
-                backgroundColor: overdue ? "#FEE2E2" : "var(--bg-badge)",
-                padding: "2px 8px", borderRadius: 6,
+                fontSize: sz.badgeFont, fontWeight: overdue ? 700 : 500,
+                color: overdue ? "var(--danger)" : "var(--text-tertiary)",
               }}>
-                {"📅 " + new Date(task.dueDate).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }) + (task.dueTime ? " " + task.dueTime : "")}
+                {new Date(task.dueDate).toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" }) + (task.dueTime ? " " + task.dueTime : "") + (overdue ? " 期限切れ" : "")}
               </span>
             )}
             {!task.dueDate && task.dueTime && (
-              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>{task.dueTime}</span>
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 500, color: "var(--text-tertiary)" }}>{task.dueTime}</span>
             )}
-            {task.notify && (
-              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: "var(--text-tertiary)", backgroundColor: "var(--bg-badge)", padding: "2px 8px", borderRadius: 6 }}>
-                {"🔔 " + getNotifyLabel(task)}
+            {!isRepeat && priObj && priObj.key !== "none" && (
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 500, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: priObj.color, display: "inline-block" }} />
+                {priObj.label}
               </span>
             )}
+            {rl && (
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 500, color: "var(--text-tertiary)" }}>{"↻ " + rl}</span>
+            )}
+            {showTabName && task._tabName && (
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 500, color: "var(--text-tertiary)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: ts.main, display: "inline-block" }} />
+                {task._tabName}
+              </span>
+            )}
+            {!task.done && progress > 0 && (
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 600, color: progress === 100 ? "#22A06B" : "var(--text-secondary)" }}>{progress}%</span>
+            )}
+            {task.notify && (
+              <span style={{ fontSize: sz.badgeFont, fontWeight: 500, color: "var(--text-tertiary)" }}>🔔</span>
+            )}
           </div>
+
+          {!task.done && progress > 0 && (
+            <div style={{ height: 3, borderRadius: 2, backgroundColor: "var(--bg-badge)", marginTop: 8, overflow: "hidden", maxWidth: 240 }}>
+              <div style={{ height: "100%", width: progress + "%", backgroundColor: progress === 100 ? "#22A06B" : "var(--accent)", borderRadius: 2 }} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1454,8 +1456,8 @@ function RepeatDetail({ task, setTask }) {
   const btnStyle = (sel) => ({
     padding: "6px 14px", borderRadius: 10, border: "none", cursor: "pointer",
     fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-    backgroundColor: sel ? "#14B8A6" : "var(--bg-card)",
-    color: sel ? "#fff" : "var(--text-secondary)",
+    backgroundColor: sel ? "var(--accent)" : "var(--bg-card)",
+    color: sel ? "var(--accent-text)" : "var(--text-secondary)",
   });
 
   const DayPicker = () => (
@@ -1469,8 +1471,8 @@ function RepeatDetail({ task, setTask }) {
               width: 38, height: 38, borderRadius: 10,
               border: sel ? "none" : "1px solid var(--border)",
               cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-              backgroundColor: sel ? "#14B8A6" : "var(--bg-card)",
-              color: sel ? "#fff" : i === 0 ? "#EF4444" : i === 6 ? "#3B82F6" : "var(--text-secondary)",
+              backgroundColor: sel ? "var(--accent)" : "var(--bg-card)",
+              color: sel ? "var(--accent-text)" : i === 0 ? "#EF4444" : i === 6 ? "#3B82F6" : "var(--text-secondary)",
             }}>{d}</button>
           );
         })}
@@ -1617,7 +1619,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
             <button key={tm} onClick={() => setTask({ ...task, dueTime: tm })} style={{
               padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
               backgroundColor: task.dueTime === tm ? ACCENT : "var(--bg-card)",
-              color: task.dueTime === tm ? "#fff" : "var(--text-secondary)",
+              color: task.dueTime === tm ? "var(--accent-text)" : "var(--text-secondary)",
               fontSize: 12, fontWeight: 600, fontFamily: "inherit",
             }}>{tm}</button>
           ))}
@@ -1632,7 +1634,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
         }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Discord通知</span>
           <button onClick={() => setTask({ ...task, notify: !task.notify, notifyTimings: getTaskTimings(task), notifyTiming: getTaskTimings(task)[0] })}
-            style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: task.notify ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
+            style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: task.notify ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative" }}>
             <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: task.notify ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
           </button>
         </div>
@@ -1658,7 +1660,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
                     padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
                     fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                     backgroundColor: sel ? ACCENT : "var(--bg-card)",
-                    color: sel ? "#fff" : "var(--text-secondary)",
+                    color: sel ? "var(--accent-text)" : "var(--text-secondary)",
                   }}>{n.label}</button>
                 );
               })}
@@ -1757,14 +1759,14 @@ function WelcomeScreen({ onCreateTab, onQuickAdd }) {
 
   return (
     <div style={{ padding: "60px 24px", textAlign: "center", maxWidth: 400, margin: "0 auto" }}>
-      <div style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+      <div style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: ACCENT, color: "var(--accent-text)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
       </div>
       <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリストへようこそ</h2>
       <p style={{ margin: "0 0 24px", fontSize: 14, color: "var(--text-secondary)" }}>タブを作って始めるか、まずはタスクを追加しましょう。</p>
 
       <button onClick={onQuickAdd}
-        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: ACCENT, color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit", marginBottom: 10 }}>
+        style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: ACCENT, color: "var(--accent-text)", fontSize: 15, fontWeight: 700, fontFamily: "inherit", marginBottom: 10 }}>
         ＋ タスクを追加
       </button>
       <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 22px" }}>タブを作らずに「すべて」に追加します</p>
@@ -2170,24 +2172,32 @@ function TodoApp() {
   const doneCount = currentTasks.filter(t => t.done).length;
   const totalCount = currentTasks.length;
 
+  // Ink Minimal: ほぼ無彩色。色は状態（期限切れ・優先度・タブ識別）にだけ使う
   const themeVars = {
-    "--bg-main":     darkMode ? "#0D1117" : "#F0F2F5",
-    "--bg-card":     darkMode ? "#161B2E" : "#FFFFFF",
-    "--bg-header":   darkMode ? "#0D1117" : "#FFFFFF",
-    "--bg-checkbox": darkMode ? "#1E2640" : "#E8EBF0",
-    "--bg-badge":    darkMode ? "#1E2640" : "#F0F2F5",
-    "--bg-input":    darkMode ? "#1E2640" : "#F0F2F5",
-    "--text-primary":   darkMode ? "#E2E8F4" : "#1A1D27",
-    "--text-secondary": darkMode ? "#8B9EC7" : "#6B7280",
-    "--text-tertiary":  darkMode ? "#4D6090" : "#9CA3AF",
-    "--border":      darkMode ? "#1E2640" : "#E5E7EB",
-    "--shadow":      darkMode ? "0 2px 16px rgba(0,0,0,0.5)" : "0 2px 12px rgba(0,0,0,0.06)",
+    "--bg-main":     darkMode ? "#101013" : "#FFFFFF",
+    "--bg-card":     darkMode ? "#151518" : "#FFFFFF",
+    "--bg-header":   darkMode ? "#101013" : "#FFFFFF",
+    "--bg-checkbox": darkMode ? "#2A2A30" : "#E9E9E7",
+    "--bg-badge":    darkMode ? "#1D1D21" : "#F4F4F2",
+    "--bg-input":    darkMode ? "#1D1D21" : "#F4F4F2",
+    "--text-primary":   darkMode ? "#EDEDEF" : "#17171A",
+    "--text-secondary": darkMode ? "#9A9AA1" : "#6E6E73",
+    "--text-tertiary":  darkMode ? "#63636B" : "#9B9BA0",
+    "--border":      darkMode ? "#26262B" : "#EBEBE9",
+    "--row-border":  darkMode ? "#1E1E22" : "#F2F2F1",
+    "--check-border": darkMode ? "#3D3D44" : "#D9D9D6",
+    "--accent":      darkMode ? "#EDEDEF" : "#17171A",
+    "--accent-text": darkMode ? "#101013" : "#FFFFFF",
+    "--danger":      darkMode ? "#F2555A" : "#D93025",
+    "--toggle-on":   "#22A06B",
+    "--warn":        darkMode ? "#E8A33D" : "#B26A00",
+    "--shadow":      darkMode ? "0 1px 2px rgba(0,0,0,0.4)" : "0 1px 2px rgba(20,20,20,0.04)",
   };
 
   if (!loaded) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F0F2F5" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid #E5E7EB", borderTopColor: ACCENT, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#FFFFFF" }}>
+        <div style={{ width: 32, height: 32, border: "3px solid #E5E7EB", borderTopColor: "#17171A", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
         <style>{"@keyframes spin { to { transform: rotate(360deg) } }"}</style>
       </div>
     );
@@ -2196,38 +2206,19 @@ function TodoApp() {
   return (
     <div style={{ ...themeVars, minHeight: "100vh", backgroundColor: "var(--bg-main)", fontFamily: "'Noto Sans JP','Hiragino Sans',sans-serif" }}>
 
-      <div style={{ backgroundColor: "var(--bg-header)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100, boxShadow: "var(--shadow)" }}>
+      <div style={{ backgroundColor: "var(--bg-header)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ padding: "16px 20px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: ACCENT, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <AppIcon />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: "var(--text-primary)" }}>ToDoリスト</h1>
-              {USER_ID && (!online || lastSyncAt) && (
-                <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: online ? "var(--text-tertiary)" : "#EF4444", fontWeight: 600 }}>
-                  {!online ? (
-                    <>
-                      <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
-                      <span>オフライン</span>
-                    </>
-                  ) : (
-                    <>
-                      <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#22C55E" }} />
-                      <span>保存済み {timeAgo(lastSyncAt)}</span>
-                    </>
-                  )}
-                </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)" }}>ToDo</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-tertiary)", fontWeight: 500 }}>
+              <span>{new Date().toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" })}</span>
+              {USER_ID && !online && (
+                <span style={{ color: "var(--danger)", fontWeight: 600 }}>・オフライン</span>
+              )}
+              {USER_ID && online && lastSyncAt && (
+                <span>・保存済み {timeAgo(lastSyncAt)}</span>
               )}
             </div>
-            <span style={{
-              padding: "5px 10px", borderRadius: 10,
-              backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
-              fontSize: 12, fontWeight: 600,
-              display: "flex", alignItems: "center", gap: 5,
-            }}>
-              <span>{new Date().toLocaleDateString("ja-JP", { month: "short", day: "numeric", weekday: "short" })}</span>
-            </span>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {USER_ID && (
@@ -2240,9 +2231,9 @@ function TodoApp() {
                 disabled={syncing}
                 title="クラウドから再読み込み"
                 style={{
-                  width: 40, height: 40, borderRadius: 10, border: "none",
+                  width: 38, height: 38, borderRadius: 19, border: "none",
                   cursor: syncing ? "default" : "pointer",
-                  backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)",
+                  backgroundColor: "transparent", color: "var(--text-secondary)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   opacity: syncing ? 0.6 : 1,
                 }}
@@ -2250,16 +2241,16 @@ function TodoApp() {
                 <RefreshIcon spinning={syncing} />
               </button>
             )}
-            <button onClick={() => { setShowSearch(true); setSearchQuery(""); }} title="検索" style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => { setShowSearch(true); setSearchQuery(""); }} title="検索" style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <SearchIcon />
             </button>
-            <button onClick={() => setShowCalc(true)} title="日数計算" style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setShowCalc(true)} title="日数計算" style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <CalcIcon />
             </button>
-            <button onClick={() => setDarkMode(!darkMode)} style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setDarkMode(!darkMode)} style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
-            <button onClick={() => setShowSettings(true)} style={{ width: 40, height: 40, borderRadius: 10, border: "none", cursor: "pointer", backgroundColor: "var(--bg-badge)", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button onClick={() => setShowSettings(true)} style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <GearIcon />
             </button>
           </div>
@@ -2300,19 +2291,19 @@ function TodoApp() {
                   <button
                     onClick={() => setActiveTabId(tab.id)}
                     style={{
-                      padding: "10px 14px", border: "none", cursor: "pointer",
-                      fontSize: isActive ? 14 : 13,
+                      padding: "10px 13px", border: "none", cursor: "pointer",
+                      fontSize: 13,
                       fontWeight: isActive ? 700 : 500, whiteSpace: "nowrap",
-                      color: isActive ? tabC : "var(--text-secondary)",
+                      color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
                       backgroundColor: "transparent",
-                      borderBottom: isActive ? "3px solid " + tabC : "3px solid transparent",
-                      fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
+                      borderBottom: isActive ? "2px solid var(--accent)" : "2px solid transparent",
+                      fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6,
                     }}>
                     {tab.pinned && <span style={{ fontSize: 9, opacity: 0.4 }}>📌</span>}
-                    <span style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: tabC, display: "inline-block", flexShrink: 0 }} />
+                    <span style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tabC, display: "inline-block", flexShrink: 0 }} />
                     {displayName}
                     {undone > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: isActive ? tabC : "var(--bg-badge)", color: isActive ? "#fff" : "var(--text-secondary)", padding: "1px 6px", borderRadius: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? "var(--text-secondary)" : "var(--text-tertiary)" }}>
                         {undone}
                       </span>
                     )}
@@ -2322,16 +2313,16 @@ function TodoApp() {
             })}
 
             <button onClick={() => setActiveTabId(ALL_TAB)} style={{
-              padding: "10px 14px", border: "none", cursor: "pointer", fontSize: 14,
+              padding: "10px 13px", border: "none", cursor: "pointer", fontSize: 13,
               fontWeight: isAllView ? 700 : 500, whiteSpace: "nowrap",
-              color: isAllView ? ACCENT : "var(--text-secondary)",
+              color: isAllView ? "var(--text-primary)" : "var(--text-secondary)",
               backgroundColor: "transparent",
-              borderBottom: isAllView ? "3px solid " + ACCENT : "3px solid transparent",
+              borderBottom: isAllView ? "2px solid var(--accent)" : "2px solid transparent",
               fontFamily: "inherit",
             }}>
               すべて
               {allTasks.filter(t => !t.done).length > 0 && (
-                <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, backgroundColor: isAllView ? ACCENT : "var(--bg-badge)", color: isAllView ? "#fff" : "var(--text-secondary)", padding: "1px 7px", borderRadius: 10, verticalAlign: "middle" }}>
+                <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, color: isAllView ? "var(--text-secondary)" : "var(--text-tertiary)", verticalAlign: "middle" }}>
                   {allTasks.filter(t => !t.done).length}
                 </span>
               )}
@@ -2339,25 +2330,24 @@ function TodoApp() {
 
             {(() => {
               const isCdActive = activeTabId === COUNTDOWN_TAB;
-              const CD_COLOR = "#F97316";
               const nearest = countdowns
                 .map(c => daysUntil(c.date))
                 .filter(d => d >= 0)
                 .sort((a, b) => a - b)[0];
               return (
                 <button onClick={() => setActiveTabId(COUNTDOWN_TAB)} style={{
-                  padding: "10px 14px", border: "none", cursor: "pointer",
-                  fontSize: isCdActive ? 14 : 13,
+                  padding: "10px 13px", border: "none", cursor: "pointer",
+                  fontSize: 13,
                   fontWeight: isCdActive ? 700 : 500, whiteSpace: "nowrap",
-                  color: isCdActive ? CD_COLOR : "var(--text-secondary)",
+                  color: isCdActive ? "var(--text-primary)" : "var(--text-secondary)",
                   backgroundColor: "transparent",
-                  borderBottom: isCdActive ? "3px solid " + CD_COLOR : "3px solid transparent",
+                  borderBottom: isCdActive ? "2px solid var(--accent)" : "2px solid transparent",
                   fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
                 }}>
                   <span>📅</span>
                   {isCdActive && <span>カウントダウン</span>}
                   {nearest != null && (
-                    <span style={{ fontSize: 11, fontWeight: 700, backgroundColor: isCdActive ? CD_COLOR : "var(--bg-badge)", color: isCdActive ? "#fff" : CD_COLOR, padding: "1px 6px", borderRadius: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: isCdActive ? "var(--text-secondary)" : "var(--text-tertiary)" }}>
                       {nearest === 0 ? "今日" : "あと" + nearest + "日"}
                     </span>
                   )}
@@ -2431,7 +2421,7 @@ function TodoApp() {
                   padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer",
                   fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                   backgroundColor: sortKey === s.key ? ACCENT : "var(--bg-badge)",
-                  color: sortKey === s.key ? "#fff" : "var(--text-secondary)",
+                  color: sortKey === s.key ? "var(--accent-text)" : "var(--text-secondary)",
                 }}>{s.label}</button>
               ))}
               {!isAllView && activeTab && (
@@ -2518,7 +2508,8 @@ function TodoApp() {
         }} style={{
           position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", right: 28, width: 60, height: 60,
           borderRadius: 18, border: "none", cursor: "pointer",
-          backgroundColor: ACCENT, boxShadow: "0 6px 24px " + ACCENT + "50",
+          backgroundColor: "var(--accent)", color: "var(--accent-text)",
+          boxShadow: "0 8px 22px rgba(0,0,0,0.25)",
           display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50,
         }}
           onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; }}
@@ -2553,7 +2544,7 @@ function TodoApp() {
           <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
             width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
             backgroundColor: newTask.text.trim() ? ACCENT : "var(--bg-badge)",
-            color: newTask.text.trim() ? "#fff" : "var(--text-tertiary)",
+            color: newTask.text.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
             fontSize: 15, fontWeight: 700, fontFamily: "inherit",
           }}>追加</button>
         ) : null}>
@@ -2589,7 +2580,7 @@ function TodoApp() {
           <button onClick={updateTask} disabled={!editingTask.text.trim()} style={{
             width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
             backgroundColor: editingTask.text.trim() ? ACCENT : "var(--bg-badge)",
-            color: editingTask.text.trim() ? "#fff" : "var(--text-tertiary)",
+            color: editingTask.text.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
             fontSize: 15, fontWeight: 700, fontFamily: "inherit",
           }}>保存</button>
         ) : null}>
@@ -2634,7 +2625,7 @@ function TodoApp() {
         <button onClick={addTab} disabled={!newTabName.trim()} style={{
           width: "100%", padding: "14px", borderRadius: 14, border: "none", cursor: "pointer",
           backgroundColor: newTabName.trim() ? ACCENT : "var(--bg-badge)",
-          color: newTabName.trim() ? "#fff" : "var(--text-tertiary)",
+          color: newTabName.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
           fontSize: 15, fontWeight: 700, fontFamily: "inherit",
         }}>追加</button>
       </Modal>
@@ -2669,7 +2660,7 @@ function TodoApp() {
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>ピン止め（先頭に表示）</span>
             <button onClick={() => setEditTabPinned(p => !p)} style={{
               width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-              backgroundColor: editTabPinned ? ACCENT : "var(--bg-checkbox)", position: "relative",
+              backgroundColor: editTabPinned ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
             }}>
               <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: editTabPinned ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
             </button>
@@ -2679,7 +2670,7 @@ function TodoApp() {
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>定時通知に含める</span>
               <button onClick={() => setEditTabNotifyInclude(v => !v)} style={{
                 width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-                backgroundColor: editTabNotifyInclude ? ACCENT : "var(--bg-checkbox)", position: "relative",
+                backgroundColor: editTabNotifyInclude ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
               }}>
                 <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: editTabNotifyInclude ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
               </button>
@@ -2763,7 +2754,7 @@ function TodoApp() {
           }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>ダークモード</span>
             <button onClick={() => setDarkMode(!darkMode)}
-              style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: darkMode ? ACCENT : "var(--bg-checkbox)", position: "relative" }}>
+              style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: darkMode ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative" }}>
               <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: darkMode ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
             </button>
           </div>
@@ -2811,7 +2802,7 @@ function TodoApp() {
                   <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>通知1</span>
                   <button
                     onClick={() => setSettingsNotify1Enabled(v => !v)}
-                    style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: settingsNotify1Enabled ? ACCENT : "var(--bg-checkbox)", position: "relative" }}
+                    style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: settingsNotify1Enabled ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative" }}
                   >
                     <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: settingsNotify1Enabled ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
                   </button>
@@ -2826,7 +2817,7 @@ function TodoApp() {
                   <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>通知2</span>
                   <button
                     onClick={() => setSettingsNotify2Enabled(v => !v)}
-                    style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: settingsNotify2Enabled ? ACCENT : "var(--bg-checkbox)", position: "relative" }}
+                    style={{ width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer", backgroundColor: settingsNotify2Enabled ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative" }}
                   >
                     <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: settingsNotify2Enabled ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
                   </button>
@@ -2840,7 +2831,7 @@ function TodoApp() {
                 onClick={handleSaveNotifySettings}
                 style={{
                   width: "100%", padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
-                  backgroundColor: ACCENT, color: "#fff",
+                  backgroundColor: ACCENT, color: "var(--accent-text)",
                   fontSize: 13, fontWeight: 700, fontFamily: "inherit",
                 }}
               >保存</button>
@@ -2869,7 +2860,7 @@ function TodoApp() {
                   <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>期限を過ぎたら通知</span>
                   <button onClick={toggleAlert} style={{
                     width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-                    backgroundColor: alertOn ? ACCENT : "var(--bg-checkbox)", position: "relative",
+                    backgroundColor: alertOn ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
                   }}>
                     <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: alertOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
                   </button>
@@ -2915,7 +2906,7 @@ function TodoApp() {
                           updateCats(next);
                         }} style={{
                           width: 44, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
-                          backgroundColor: on ? ACCENT : "var(--bg-checkbox)", position: "relative",
+                          backgroundColor: on ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
                         }}>
                           <div style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff", position: "absolute", top: 3, left: on ? 21 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
                         </button>
@@ -2932,7 +2923,7 @@ function TodoApp() {
                       <button key={p.key} onClick={() => updateMinPri(p.key)} style={{
                         padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
                         backgroundColor: sel ? ACCENT : "var(--bg-badge)",
-                        color: sel ? "#fff" : "var(--text-secondary)",
+                        color: sel ? "var(--accent-text)" : "var(--text-secondary)",
                         fontSize: 13, fontWeight: 600, fontFamily: "inherit",
                       }}>{p.label}</button>
                     );
