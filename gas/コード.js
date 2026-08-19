@@ -1,7 +1,7 @@
 // ============================================
-// ToDo アプリ GAS コード v11
+// ToDo アプリ GAS コード v12
 // 通知基盤: Discord（Vercel中継 /api/discord/send 経由）
-// v11: 通知ボタン（完了/スヌーズ）・Discord操作アクション・スラッシュコマンド対応
+// v12: 定時まとめの曜日指定・0件スキップ・期限超過の猶予設定に対応
 // ============================================
 const SPREADSHEET_ID = '1lIYGcsu_XWzweXHj82M4QM2pCoSLtSiFsBj5hLfzNkg';
 const APP_URL = 'https://todo-app-tawny-iota-98.vercel.app';
@@ -330,6 +330,7 @@ function handleDiscordComplete(body) {
 
       task.done = true;
       task.progress = 100;
+      task.completedAt = Date.now(); // 完了済み自動削除の起点
       if (task.repeat && task.repeat !== 'none') task.lastCompletedAt = Date.now();
 
       syncSheet.getRange(i + 1, 2).setValue(JSON.stringify(appData));
@@ -561,9 +562,12 @@ function checkDailyNotify(ss, uSheet, users) {
   for (let j = 1; j < syncData.length; j++) syncMap[syncData[j][0]] = syncData[j][1];
 
   const slots = [
-    { timeCol: COL_NOTIFY1_TIME, enabledCol: COL_NOTIFY1_ENABLED, lastCol: COL_NOTIFY1_LAST_SENT },
-    { timeCol: COL_NOTIFY2_TIME, enabledCol: COL_NOTIFY2_ENABLED, lastCol: COL_NOTIFY2_LAST_SENT },
+    { timeCol: COL_NOTIFY1_TIME, enabledCol: COL_NOTIFY1_ENABLED, lastCol: COL_NOTIFY1_LAST_SENT, daysKey: 'notify1Days' },
+    { timeCol: COL_NOTIFY2_TIME, enabledCol: COL_NOTIFY2_ENABLED, lastCol: COL_NOTIFY2_LAST_SENT, daysKey: 'notify2Days' },
   ];
+
+  // JSTの曜日（0=日〜6=土）
+  const dowJst = parseInt(Utilities.formatDate(now, 'Asia/Tokyo', 'u'), 10) % 7;
 
   for (let i = 1; i < users.length; i++) {
     const userId = users[i][COL_USER_ID];
@@ -582,6 +586,10 @@ function checkDailyNotify(ss, uSheet, users) {
       // 設定時刻を過ぎている かつ 当日未送信なら送信（3分窓方式は廃止）
       if (!enabled || !time || last === today || currentTime < time) return;
 
+      // 曜日指定: 配列があり今日が含まれない場合はスキップ（lastSentは触らない）
+      const days = (appData.settings || {})[slot.daysKey];
+      if (Array.isArray(days) && days.length > 0 && days.indexOf(dowJst) === -1) return;
+
       // fresh再読込＋送信前lastSentセットで二重送信ガード
       const fresh = getDateString(uSheet.getRange(i + 1, slot.lastCol + 1).getValue());
       if (fresh === today) return;
@@ -589,6 +597,8 @@ function checkDailyNotify(ss, uSheet, users) {
       SpreadsheetApp.flush();
 
       const msg = buildDailySummary(appData, today, time);
+      // 0件スキップ設定: 当日送信済み扱いのまま送らない
+      if (msg.count === 0 && (appData.settings || {}).skipEmptySummary) return;
       sendDiscordMessage({ content: msg.content, embeds: [msg.embed] });
     });
   }
@@ -678,7 +688,8 @@ function checkOverdueAlerts(ss) {
         const dueTs = new Date(task.dueDate + 'T' + getTimeString(task.dueTime) + ':00+09:00').getTime();
         if (isNaN(dueTs)) return;
         const overdueMs = nowTs - dueTs;
-        if (overdueMs < OVERDUE_ALERT_GRACE_MIN * 60 * 1000) return;
+        const graceMin = (typeof settings.overdueGraceMin === 'number') ? settings.overdueGraceMin : OVERDUE_ALERT_GRACE_MIN;
+        if (overdueMs < graceMin * 60 * 1000) return;
 
         // 窓内なら送信。古すぎるものはマークのみ（一斉送信防止）
         if (overdueMs <= OVERDUE_ALERT_WINDOW_HOURS * 60 * 60 * 1000) {
@@ -886,6 +897,7 @@ function buildDailySummary(appData, today, notifyTime) {
 
   if (totalCount === 0) {
     return {
+      count: 0,
       content: '📋 本日のまとめ（0件）',
       embed: {
         title: greeting,
@@ -909,6 +921,7 @@ function buildDailySummary(appData, today, notifyTime) {
   const overdueCount = enabledCats.indexOf('overdue') !== -1 ? grouped.overdue.length : 0;
 
   return {
+    count: totalCount,
     content: '📋 本日のまとめ（' + totalCount + '件）',
     embed: {
       title: greeting,

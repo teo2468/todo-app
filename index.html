@@ -156,9 +156,23 @@ const USER_ID = (() => {
   try { return localStorage.getItem("todo-app-userId") || null; } catch (e) { return null; }
 })();
 
+// localStorageに保存済みのappDataからsettingsを読む（トップレベル関数から参照する用）
+function getLocalSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("todo-app-v6"));
+    return (raw && raw.settings) || {};
+  } catch (e) { return {}; }
+}
+
+// 時刻未設定タスクの通知基準時刻（設定で変更可、既定9:00）
+function getDefaultNotifyTime() {
+  const t = getLocalSettings().defaultNotifyTime;
+  return (typeof t === "string" && /^\d{2}:\d{2}$/.test(t)) ? t : "09:00";
+}
+
 function sendNotifyToGAS(task) {
   if (!task.notify || !task.dueDate || !USER_ID) return;
-  const timeStr = task.dueTime || "09:00";
+  const timeStr = task.dueTime || getDefaultNotifyTime();
   const notifyAts = getNotifyMinutesList(task).map(mins => {
     const t = new Date(task.dueDate + "T" + timeStr);
     t.setMinutes(t.getMinutes() - mins);
@@ -351,7 +365,7 @@ function tsToDateStr(ts) {
 // 繰り返しタスクの「次回発生日」。今日がパターンに一致し期限時刻をまだ過ぎていなければ今日
 function nextOccurrenceDateStr(task) {
   const now = new Date();
-  const timeStr = task.dueTime || "09:00";
+  const timeStr = task.dueTime || getDefaultNotifyTime();
   const todayDue = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
     parseInt(timeStr.slice(0, 2), 10) || 0, parseInt(timeStr.slice(3, 5), 10) || 0);
 
@@ -417,6 +431,23 @@ function resetRepeatTasks(appData) {
     return { ...tab, tasks: newTasks };
   });
   toReschedule.forEach(t => sendNotifyToGAS(t));
+  return changed ? { ...appData, tabs: newTabs } : appData;
+}
+
+// 完了から指定日数が経ったタスクを自動削除（completedAtを持つタスクのみ対象）
+function autoCleanupDoneTasks(appData) {
+  const days = (appData.settings || {}).autoCleanupDays;
+  if (!days || days <= 0) return appData;
+  const cutoff = Date.now() - days * 86400000;
+  let changed = false;
+  const newTabs = (appData.tabs || []).map(tab => {
+    const keep = (tab.tasks || []).filter(t => {
+      const drop = t.done && t.completedAt && t.completedAt < cutoff;
+      if (drop) changed = true;
+      return !drop;
+    });
+    return keep.length === (tab.tasks || []).length ? tab : { ...tab, tasks: keep };
+  });
   return changed ? { ...appData, tabs: newTabs } : appData;
 }
 
@@ -1454,6 +1485,32 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
   );
 }
 
+// 定時まとめの曜日選択チップ（最低1つは残す）
+function WeekdayChips({ days, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+      {WEEKDAYS_JP.map((d, i) => {
+        const sel = days.includes(i);
+        return (
+          <button key={i} onClick={() => {
+            if (sel) {
+              if (days.length === 1) return;
+              onChange(days.filter(x => x !== i));
+            } else {
+              onChange([...days, i].sort((a, b) => a - b));
+            }
+          }} style={{
+            flex: 1, padding: "6px 0", borderRadius: 8, border: "none", cursor: "pointer",
+            fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+            backgroundColor: sel ? "var(--accent)" : "var(--bg-card)",
+            color: sel ? "var(--accent-text)" : i === 0 ? "#EF4444" : i === 6 ? "#3B82F6" : "var(--text-secondary)",
+          }}>{d}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 function RepeatDetail({ task, setTask }) {
   const r = task.repeat;
   const toggleDay = (i) => {
@@ -1710,7 +1767,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
             })()}
             {!task.dueTime && (
               <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
-                ⏰ 時刻が未設定のため 9:00 を基準に通知します
+                {"⏰ 時刻が未設定のため " + getDefaultNotifyTime() + " を基準に通知します（設定で変更可）"}
               </p>
             )}
           </div>
@@ -1878,6 +1935,9 @@ function TodoApp() {
   const [settingsNotify1Enabled, setSettingsNotify1Enabled] = useState(false);
   const [settingsNotify2Time, setSettingsNotify2Time] = useState("");
   const [settingsNotify2Enabled, setSettingsNotify2Enabled] = useState(false);
+  const [settingsNotify1Days, setSettingsNotify1Days] = useState([0, 1, 2, 3, 4, 5, 6]);
+  const [settingsNotify2Days, setSettingsNotify2Days] = useState([0, 1, 2, 3, 4, 5, 6]);
+  const [settingsSkipEmpty, setSettingsSkipEmpty] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   useEffect(() => {
@@ -1887,6 +1947,9 @@ function TodoApp() {
       setSettingsNotify1Enabled(!!s.notify1Enabled);
       setSettingsNotify2Time(s.notify2Time || "");
       setSettingsNotify2Enabled(!!s.notify2Enabled);
+      setSettingsNotify1Days(Array.isArray(s.notify1Days) && s.notify1Days.length ? s.notify1Days : [0, 1, 2, 3, 4, 5, 6]);
+      setSettingsNotify2Days(Array.isArray(s.notify2Days) && s.notify2Days.length ? s.notify2Days : [0, 1, 2, 3, 4, 5, 6]);
+      setSettingsSkipEmpty(!!s.skipEmptySummary);
     }
   }, [loaded]);
 
@@ -1895,10 +1958,11 @@ function TodoApp() {
   useEffect(() => {
     if (!loaded) return;
     const check = () => {
-      const updated = resetRepeatTasks(appDataRef.current);
-      if (updated !== appDataRef.current) {
-        updateData(updated);
-        syncNow(updated);
+      let next = resetRepeatTasks(appDataRef.current);
+      next = autoCleanupDoneTasks(next);
+      if (next !== appDataRef.current) {
+        updateData(next);
+        syncNow(next);
       }
     };
     check();
@@ -1914,6 +1978,9 @@ function TodoApp() {
       notify1Enabled: settingsNotify1Enabled,
       notify2Time: settingsNotify2Time,
       notify2Enabled: settingsNotify2Enabled,
+      notify1Days: settingsNotify1Days,
+      notify2Days: settingsNotify2Days,
+      skipEmptySummary: settingsSkipEmpty,
     };
     const newData = {
       ...appData,
@@ -2026,6 +2093,9 @@ function TodoApp() {
     setTabs(arr);
   };
 
+  // 新規タスクの初期値（設定で通知デフォルトONにできる）
+  const newEmptyTask = () => ({ ...emptyTask, notify: !!((appData.settings || {}).notifyDefaultOn) });
+
   const handleAddTask = () => {
     const targetTabId = isAllView ? addToTabId : activeTabId;
     if (!newTask.text.trim() || !targetTabId) return;
@@ -2037,9 +2107,12 @@ function TodoApp() {
     updateData(newData);
     syncNow(newData);
     sendNotifyToGAS(task);
-    setNewTask({ ...emptyTask });
-    setShowAddTask(false);
-    setAddToTabId(null);
+    setNewTask(newEmptyTask());
+    // 連続追加モード: モーダルを開いたまま次の入力へ
+    if (!(appData.settings || {}).continuousAdd) {
+      setShowAddTask(false);
+      setAddToTabId(null);
+    }
   };
 
   const updateTask = () => {
@@ -2072,6 +2145,7 @@ function TodoApp() {
         if (x.id === id) {
           const newDone = !x.done;
           const u = { ...x, done: newDone };
+          u.completedAt = newDone ? Date.now() : null;
           if (x.repeat && x.repeat !== "none") {
             u.lastCompletedAt = newDone ? Date.now() : null;
           }
@@ -2382,7 +2456,7 @@ function TodoApp() {
             setTabs([defaultTab]);
             setActiveTabId(ALL_TAB);
             setAddToTabId(defaultTab.id);
-            setNewTask({ ...emptyTask });
+            setNewTask(newEmptyTask());
             setShowAddTask(true);
           }}
         />
@@ -2511,7 +2585,7 @@ function TodoApp() {
           } else {
             setAddToTabId(activeTabId);
           }
-          setNewTask({ ...emptyTask });
+          setNewTask(newEmptyTask());
           setShowAddTask(true);
         }} style={{
           position: "fixed", bottom: "calc(28px + env(safe-area-inset-bottom))", right: 28, width: 60, height: 60,
@@ -2549,12 +2623,23 @@ function TodoApp() {
 
       <Modal isOpen={showAddTask} onClose={() => { setShowAddTask(false); setAddToTabId(null); }} title="タスクを追加"
         footer={addToTabId ? (
-          <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
-            width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-            backgroundColor: newTask.text.trim() ? ACCENT : "var(--bg-badge)",
-            color: newTask.text.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
-            fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-          }}>追加</button>
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-secondary)", marginBottom: 10, cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={!!(appData.settings || {}).continuousAdd}
+                onChange={(e) => {
+                  const newData = { ...appData, settings: { ...(appData.settings || {}), continuousAdd: e.target.checked } };
+                  updateData(newData);
+                  syncNow(newData);
+                }} />
+              連続で追加（追加後もこの画面を開いたまま）
+            </label>
+            <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
+              width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
+              backgroundColor: newTask.text.trim() ? ACCENT : "var(--bg-badge)",
+              color: newTask.text.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
+              fontSize: 15, fontWeight: 700, fontFamily: "inherit",
+            }}>追加</button>
+          </div>
         ) : null}>
         {isAllView && tabs.length > 1 && addToTabId && (
           <div style={{ marginBottom: 14 }}>
@@ -2826,7 +2911,10 @@ function TodoApp() {
                   </button>
                 </div>
                 {settingsNotify1Enabled && (
-                  <TimeInput value={settingsNotify1Time} onChange={setSettingsNotify1Time} />
+                  <div>
+                    <TimeInput value={settingsNotify1Time} onChange={setSettingsNotify1Time} />
+                    <WeekdayChips days={settingsNotify1Days} onChange={setSettingsNotify1Days} />
+                  </div>
                 )}
               </div>
 
@@ -2841,8 +2929,21 @@ function TodoApp() {
                   </button>
                 </div>
                 {settingsNotify2Enabled && (
-                  <TimeInput value={settingsNotify2Time} onChange={setSettingsNotify2Time} />
+                  <div>
+                    <TimeInput value={settingsNotify2Time} onChange={setSettingsNotify2Time} />
+                    <WeekdayChips days={settingsNotify2Days} onChange={setSettingsNotify2Days} />
+                  </div>
                 )}
+              </div>
+
+              <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>タスク0件の日は送らない</span>
+                <button onClick={() => setSettingsSkipEmpty(v => !v)} style={{
+                  width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
+                  backgroundColor: settingsSkipEmpty ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
+                }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: settingsSkipEmpty ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                </button>
               </div>
 
               <button
@@ -2884,8 +2985,28 @@ function TodoApp() {
                     <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: alertOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
                   </button>
                 </div>
+                {alertOn && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {[{ v: 0, label: "すぐ" }, { v: 30, label: "30分後" }, { v: 60, label: "1時間後" }].map(o => {
+                      const cur = typeof (appData.settings || {}).overdueGraceMin === "number" ? appData.settings.overdueGraceMin : 30;
+                      const sel = cur === o.v;
+                      return (
+                        <button key={o.v} onClick={() => {
+                          const newData = { ...appData, settings: { ...(appData.settings || {}), overdueGraceMin: o.v } };
+                          updateData(newData);
+                          syncNow(newData);
+                        }} style={{
+                          flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
+                          backgroundColor: sel ? "var(--accent)" : "var(--bg-badge)",
+                          color: sel ? "var(--accent-text)" : "var(--text-secondary)",
+                          fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                        }}>{o.label}</button>
+                      );
+                    })}
+                  </div>
+                )}
                 <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
-                  時刻つきの期限が対象。期限を30分過ぎても未完了のタスクに1回だけ通知します。
+                  時刻つきの期限が対象。期限を過ぎて選んだ猶予が経っても未完了なら1回だけ通知します。
                 </p>
               </div>
             );
@@ -2961,8 +3082,70 @@ function TodoApp() {
             );
           })()}
 
+          {USER_ID && (() => {
+            const s = appData.settings || {};
+            const setS = (patch) => {
+              const newData = { ...appData, settings: { ...s, ...patch } };
+              updateData(newData);
+              syncNow(newData);
+            };
+            return (
+              <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
+                  個別リマインドの既定
+                </div>
+                <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>基準時刻</span>
+                    <div style={{ width: 110 }}>
+                      <TimeInput value={s.defaultNotifyTime || "09:00"} onChange={(v) => setS({ defaultNotifyTime: v || "09:00" })} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: 0, lineHeight: 1.5 }}>
+                    時刻未設定のタスクの通知はこの時刻を基準にします。
+                  </p>
+                </div>
+                <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>新規タスクの通知を最初からON</span>
+                  <button onClick={() => setS({ notifyDefaultOn: !s.notifyDefaultOn })} style={{
+                    width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
+                    backgroundColor: s.notifyDefaultOn ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
+                  }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: s.notifyDefaultOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ marginTop: 4, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.06em", marginBottom: 2 }}>データ</div>
+            {(() => {
+              const cur = (appData.settings || {}).autoCleanupDays || 0;
+              const setDays = (v) => {
+                const newData = { ...appData, settings: { ...(appData.settings || {}), autoCleanupDays: v } };
+                updateData(newData);
+                syncNow(newData);
+              };
+              return (
+                <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>完了済みを自動削除</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[{ v: 0, label: "オフ" }, { v: 3, label: "3日後" }, { v: 7, label: "7日後" }, { v: 30, label: "30日後" }].map(o => (
+                      <button key={o.v} onClick={() => setDays(o.v)} style={{
+                        flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
+                        backgroundColor: cur === o.v ? "var(--accent)" : "var(--bg-card)",
+                        color: cur === o.v ? "var(--accent-text)" : "var(--text-secondary)",
+                        fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                      }}>{o.label}</button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                    完了にした日時から数えて削除します（この設定を入れる前に完了したタスクは対象外）。
+                  </p>
+                </div>
+              );
+            })()}
             <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) }))); setShowSettings(false); }} style={{
               width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
               backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
