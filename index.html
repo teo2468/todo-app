@@ -2958,59 +2958,11 @@ function TodoApp() {
                 <p style={{ fontSize: 12, color: "#22C55E", margin: "8px 0 0", fontWeight: 600, textAlign: "center" }}>✓ 保存しました</p>
               )}
               <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.6 }}>
-                定時通知の内容は下のセクションでカスタマイズできます。
+                まとめに含める内容はすぐ下の「定時まとめの内容」で変更できます。
                 タスク個別のリマインドは各タスクの編集画面「Discord通知」で、カウントダウンの通知は各カウントダウンの✏️（編集）から設定します。
               </p>
             </div>
           )}
-
-          {USER_ID && (() => {
-            const alertOn = (appData.settings || {}).overdueAlert !== false;
-            const toggleAlert = () => {
-              const newData = { ...appData, settings: { ...(appData.settings || {}), overdueAlert: !alertOn } };
-              updateData(newData);
-              syncNow(newData);
-            };
-            return (
-              <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
-                  期限超過アラート
-                </div>
-                <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>期限を過ぎたら通知</span>
-                  <button onClick={toggleAlert} style={{
-                    width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
-                    backgroundColor: alertOn ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
-                  }}>
-                    <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: alertOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
-                  </button>
-                </div>
-                {alertOn && (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    {[{ v: 0, label: "すぐ" }, { v: 30, label: "30分後" }, { v: 60, label: "1時間後" }].map(o => {
-                      const cur = typeof (appData.settings || {}).overdueGraceMin === "number" ? appData.settings.overdueGraceMin : 30;
-                      const sel = cur === o.v;
-                      return (
-                        <button key={o.v} onClick={() => {
-                          const newData = { ...appData, settings: { ...(appData.settings || {}), overdueGraceMin: o.v } };
-                          updateData(newData);
-                          syncNow(newData);
-                        }} style={{
-                          flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
-                          backgroundColor: sel ? "var(--accent)" : "var(--bg-badge)",
-                          color: sel ? "var(--accent-text)" : "var(--text-secondary)",
-                          fontSize: 13, fontWeight: 600, fontFamily: "inherit",
-                        }}>{o.label}</button>
-                      );
-                    })}
-                  </div>
-                )}
-                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
-                  時刻つきの期限が対象。期限を過ぎて選んだ猶予が経っても未完了なら1回だけ通知します。
-                </p>
-              </div>
-            );
-          })()}
 
           {USER_ID && (() => {
             const enabled = (appData.settings && appData.settings.notifyCategories) || DEFAULT_NOTIFY_CATEGORIES;
@@ -3030,7 +2982,7 @@ function TodoApp() {
             return (
               <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
-                  定時通知の内容
+                  定時まとめの内容
                 </div>
                 <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "0 0 10px", lineHeight: 1.5 }}>
                   含めるカテゴリ（順序は固定）。
@@ -3114,6 +3066,54 @@ function TodoApp() {
                     <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: s.notifyDefaultOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
                   </button>
                 </div>
+              </div>
+            );
+          })()}
+
+          {USER_ID && (() => {
+            const alertOn = (appData.settings || {}).overdueAlert !== false;
+            const toggleAlert = () => {
+              const newData = { ...appData, settings: { ...(appData.settings || {}), overdueAlert: !alertOn } };
+              updateData(newData);
+              syncNow(newData);
+            };
+            return (
+              <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 10, letterSpacing: "0.06em" }}>
+                  期限超過アラート
+                </div>
+                <div style={{ padding: "12px 16px", backgroundColor: "var(--bg-badge)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>期限を過ぎたら通知</span>
+                  <button onClick={toggleAlert} style={{
+                    width: 52, height: 30, borderRadius: 15, border: "none", cursor: "pointer",
+                    backgroundColor: alertOn ? "var(--toggle-on)" : "var(--bg-checkbox)", position: "relative",
+                  }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff", position: "absolute", top: 3, left: alertOn ? 25 : 3, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }} />
+                  </button>
+                </div>
+                {alertOn && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {[{ v: 0, label: "すぐ" }, { v: 30, label: "30分後" }, { v: 60, label: "1時間後" }].map(o => {
+                      const cur = typeof (appData.settings || {}).overdueGraceMin === "number" ? appData.settings.overdueGraceMin : 30;
+                      const sel = cur === o.v;
+                      return (
+                        <button key={o.v} onClick={() => {
+                          const newData = { ...appData, settings: { ...(appData.settings || {}), overdueGraceMin: o.v } };
+                          updateData(newData);
+                          syncNow(newData);
+                        }} style={{
+                          flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
+                          backgroundColor: sel ? "var(--accent)" : "var(--bg-badge)",
+                          color: sel ? "var(--accent-text)" : "var(--text-secondary)",
+                          fontSize: 13, fontWeight: 600, fontFamily: "inherit",
+                        }}>{o.label}</button>
+                      );
+                    })}
+                  </div>
+                )}
+                <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
+                  時刻つきの期限が対象。期限を過ぎて選んだ猶予が経っても未完了なら1回だけ通知します。
+                </p>
               </div>
             );
           })()}
