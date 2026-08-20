@@ -942,8 +942,8 @@ function CountdownReminderPanel({ reminder, onChange }) {
 }
 
 function cdDaysLabel(days) {
-  if (days < 0) return { label: Math.abs(days) + "日超過", color: "#EF4444" };
-  if (days === 0) return { label: "今日！", color: "#22C55E" };
+  if (days < 0) return { label: Math.abs(days) + "日超過", color: "var(--danger)" };
+  if (days === 0) return { label: "今日！", color: "var(--success)" };
   if (days <= 7) return { label: "あと" + days + "日", color: "#F97316" };
   if (days <= 30) return { label: "あと" + days + "日", color: "#EAB308" };
   return { label: "あと" + days + "日", color: ACCENT };
@@ -1015,7 +1015,7 @@ function DateCalculator() {
           {calcDays !== null && (
             <div style={{
               marginTop: 14, padding: "14px 16px", borderRadius: 12,
-              backgroundColor: calcDays < 0 ? "#FEE2E2" : calcDays === 0 ? "#DCFCE7" : "var(--bg-badge)",
+              backgroundColor: calcDays < 0 ? "var(--danger-bg)" : calcDays === 0 ? "var(--success-bg)" : "var(--bg-badge)",
               display: "flex", justifyContent: "space-between", alignItems: "center",
             }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
@@ -1025,7 +1025,7 @@ function DateCalculator() {
                     + new Date(calcEnd + "T00:00:00").toLocaleDateString("ja-JP", { month: "short", day: "numeric" })
                   : ""}
               </span>
-              <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "#EF4444" : calcDays === 0 ? "#22C55E" : ACCENT }}>
+              <span style={{ fontSize: 22, fontWeight: 900, color: calcDays < 0 ? "var(--danger)" : calcDays === 0 ? "var(--success)" : ACCENT }}>
                 {calcDays < 0 ? calcDays + "日" : calcDays === 0 ? "同じ日" : calcDays + "日間"}
               </span>
             </div>
@@ -2230,10 +2230,11 @@ function TodoApp() {
     const scopeCheck = (t) => isAllView || t.id === activeTabId;
     const newTabs = tabs.map(t => {
       if (!scopeCheck(t)) return t;
+      // 繰り返しタスクは自動リセットで復活する前提のため削除対象外
       t.tasks.forEach(task => {
-        if (task.done) removed.push({ task, tabId: t.id });
+        if (task.done && (!task.repeat || task.repeat === "none")) removed.push({ task, tabId: t.id });
       });
-      return { ...t, tasks: t.tasks.filter(x => !x.done) };
+      return { ...t, tasks: t.tasks.filter(x => !x.done || (x.repeat && x.repeat !== "none")) };
     });
     setTabs(newTabs);
     if (removed.length) {
@@ -2278,13 +2279,17 @@ function TodoApp() {
     "--bg-input":    darkMode ? "#1D1D21" : "#F4F4F2",
     "--text-primary":   darkMode ? "#EDEDEF" : "#17171A",
     "--text-secondary": darkMode ? "#9A9AA1" : "#6E6E73",
-    "--text-tertiary":  darkMode ? "#63636B" : "#9B9BA0",
+    "--text-tertiary":  darkMode ? "#74747D" : "#9B9BA0",
     "--border":      darkMode ? "#26262B" : "#EBEBE9",
     "--row-border":  darkMode ? "#1E1E22" : "#F2F2F1",
     "--check-border": darkMode ? "#3D3D44" : "#D9D9D6",
     "--accent":      darkMode ? "#EDEDEF" : "#17171A",
     "--accent-text": darkMode ? "#101013" : "#FFFFFF",
     "--danger":      darkMode ? "#F2555A" : "#D93025",
+    "--danger-bg":   darkMode ? "#3A1D1F" : "#FEF2F2",
+    "--success":     "#22A06B",
+    "--success-bg":  darkMode ? "#16301F" : "#DCFCE7",
+    "--toast-action": darkMode ? "#2563EB" : "#7CB0FF",
     "--toggle-on":   "#22A06B",
     "--warn":        darkMode ? "#E8A33D" : "#B26A00",
     "--shadow":      darkMode ? "0 1px 2px rgba(0,0,0,0.4)" : "0 1px 2px rgba(20,20,20,0.04)",
@@ -2292,8 +2297,8 @@ function TodoApp() {
 
   if (!loaded) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#FFFFFF" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid #E5E7EB", borderTopColor: "#17171A", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: darkMode ? "#101013" : "#FFFFFF" }}>
+        <div style={{ width: 32, height: 32, border: "3px solid " + (darkMode ? "#26262B" : "#E5E7EB"), borderTopColor: darkMode ? "#EDEDEF" : "#17171A", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
         <style>{"@keyframes spin { to { transform: rotate(360deg) } }"}</style>
       </div>
     );
@@ -2629,7 +2634,7 @@ function TodoApp() {
           </span>
           <button onClick={undoDelete} style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "#60A5FA", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+            color: "var(--toast-action)", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
             padding: "4px 8px",
           }}>元に戻す</button>
         </div>
@@ -2704,7 +2709,7 @@ function TodoApp() {
               )}
               <button onClick={() => { const id = editingTask.id; setEditingTask(null); deleteTask(id); }} style={{
                 padding: "10px", borderRadius: 10, border: "none",
-                cursor: "pointer", backgroundColor: "#FEF2F2", color: "#EF4444",
+                cursor: "pointer", backgroundColor: "var(--danger-bg)", color: "var(--danger)",
                 fontSize: 13, fontWeight: 700, fontFamily: "inherit",
                 gridColumn: tabs.length > 1 ? "auto" : "span 2",
               }}>削除</button>
@@ -2785,7 +2790,7 @@ function TodoApp() {
           )}
           <button onClick={() => { const id = editingTabId; setEditingTabId(null); setDelTabId(id); }} style={{
             width: "100%", marginTop: 12, padding: "12px", borderRadius: 10, border: "none",
-            cursor: "pointer", backgroundColor: "#FEF2F2", color: "#EF4444",
+            cursor: "pointer", backgroundColor: "var(--danger-bg)", color: "var(--danger)",
             fontSize: 13, fontWeight: 700, fontFamily: "inherit",
           }}>このタブを削除</button>
         </div>
@@ -2969,9 +2974,10 @@ function TodoApp() {
                 }}
               >保存</button>
               {settingsSaved && (
-                <p style={{ fontSize: 12, color: "#22C55E", margin: "8px 0 0", fontWeight: 600, textAlign: "center" }}>✓ 保存しました</p>
+                <p style={{ fontSize: 12, color: "var(--success)", margin: "8px 0 0", fontWeight: 600, textAlign: "center" }}>✓ 保存しました</p>
               )}
               <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.6 }}>
+                時刻・曜日・0件スキップは「保存」を押すと反映されます。
                 まとめに含める内容はすぐ下の「定時まとめの内容」で変更できます。
                 タスク個別のリマインドは各タスクの編集画面「Discord通知」で、カウントダウンの通知は各カウントダウンの✏️（編集）から設定します。
               </p>
@@ -3156,11 +3162,12 @@ function TodoApp() {
                   </div>
                   <p style={{ fontSize: 11, color: "var(--text-tertiary)", margin: "8px 0 0", lineHeight: 1.5 }}>
                     完了にした日時から数えて削除します（この設定を入れる前に完了したタスクは対象外）。
+                    繰り返しタスクは自動・手動どちらの削除でも残ります。
                   </p>
                 </div>
               );
             })()}
-            <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done) }))); setShowSettings(false); }} style={{
+            <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done || (x.repeat && x.repeat !== "none")) }))); setShowSettings(false); }} style={{
               width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
               backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
               fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
@@ -3180,7 +3187,7 @@ function TodoApp() {
             <div style={{ marginTop: 8 }}>
               <button onClick={resetData} style={{
                 width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
-                backgroundColor: "#FEF2F2", color: "#EF4444",
+                backgroundColor: "var(--danger-bg)", color: "var(--danger)",
                 fontSize: 14, fontWeight: 700, fontFamily: "inherit",
               }}>すべてのデータをリセット</button>
               <p style={{ fontSize: 12, color: "var(--text-tertiary)", textAlign: "center", marginTop: 8, marginBottom: 0 }}>タブ・タスク・カウントダウンがすべて削除されます</p>
@@ -3191,7 +3198,7 @@ function TodoApp() {
 
       <Modal isOpen={confirmClearDone} onClose={() => setConfirmClearDone(false)} title="完了済みを削除">
         <p style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6, margin: "0 0 20px" }}>
-          完了済みのタスクをすべて削除します。この操作は元に戻せません。
+          完了済みのタスクをすべて削除します（繰り返しタスクは残ります）。この操作は元に戻せません。
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={() => setConfirmClearDone(false)} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: "inherit" }}>キャンセル</button>

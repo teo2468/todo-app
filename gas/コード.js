@@ -398,14 +398,18 @@ function handleDiscordCommand(body) {
         let count = 0;
         (appData.tabs || []).forEach((tab) => {
           const keep = [];
-          (tab.tasks || []).forEach((t) => { if (t.done) count++; else keep.push(t); });
+          (tab.tasks || []).forEach((t) => {
+            // 繰り返しタスクは自動リセットで復活する前提のため削除対象外
+            if (t.done && (!t.repeat || t.repeat === 'none')) count++;
+            else keep.push(t);
+          });
           tab.tasks = keep;
         });
         if (count > 0) {
           syncSheet.getRange(i + 1, 2).setValue(JSON.stringify(appData));
           syncSheet.getRange(i + 1, 3).setValue(new Date().toISOString());
         }
-        return jsonResponse({ ok: true, content: '🗑 完了済みタスクを ' + count + '件 削除しました', embeds: [] });
+        return jsonResponse({ ok: true, content: '🗑 完了済みタスクを ' + count + '件 削除しました（繰り返しタスクは残ります）', embeds: [] });
       }
       return jsonResponse({ ok: false, error: 'user_not_found' });
     } finally {
