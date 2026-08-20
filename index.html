@@ -442,7 +442,8 @@ function autoCleanupDoneTasks(appData) {
   let changed = false;
   const newTabs = (appData.tabs || []).map(tab => {
     const keep = (tab.tasks || []).filter(t => {
-      const drop = t.done && t.completedAt && t.completedAt < cutoff;
+      // 繰り返しタスクは自動リセットで復活する前提のため削除対象外
+      const drop = t.done && t.completedAt && t.completedAt < cutoff && (!t.repeat || t.repeat === "none");
       if (drop) changed = true;
       return !drop;
     });
@@ -592,7 +593,7 @@ function useStorage() {
     localUpdatedAtRef.current = ts;
     if (USER_ID) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => { syncToGAS(d); }, 5000);
+      debounceRef.current = setTimeout(() => { debounceRef.current = null; syncToGAS(d); }, 5000);
     }
   }, [syncToGAS]);
 
@@ -2118,10 +2119,23 @@ function TodoApp() {
   const updateTask = () => {
     if (!editingTask || !editingTask.text.trim()) return;
     const saved = { ...editingTask };
-    // 繰り返しタスクは次回発生日をdueDateに持たせる
-    if (saved.repeat && saved.repeat !== "none") saved.dueDate = nextOccurrenceDateStr(saved);
-    // 期限が変わったら超過アラート済みマークをクリア（新しい期限で再度アラート可能に）
     const orig = tabs.flatMap(t => t.tasks).find(x => x.id === saved.id);
+    // 繰り返しタスクは次回発生日をdueDateに持たせる。
+    // ただし繰り返し設定・時刻が変わったときだけ再計算する（メモ編集等で期限切れ状態が消えないように）
+    if (saved.repeat && saved.repeat !== "none") {
+      const repeatChanged = !orig
+        || orig.repeat !== saved.repeat
+        || orig.dueTime !== saved.dueTime
+        || JSON.stringify(orig.repeatDays || []) !== JSON.stringify(saved.repeatDays || [])
+        || orig.repeatMonthDay !== saved.repeatMonthDay
+        || orig.monthMode !== saved.monthMode
+        || orig.monthOrdinal !== saved.monthOrdinal
+        || orig.monthWeekday !== saved.monthWeekday
+        || orig.customInterval !== saved.customInterval
+        || orig.customUnit !== saved.customUnit;
+      if (repeatChanged || !saved.dueDate) saved.dueDate = nextOccurrenceDateStr(saved);
+    }
+    // 期限が変わったら超過アラート済みマークをクリア（新しい期限で再度アラート可能に）
     if (orig && (orig.dueDate !== saved.dueDate || orig.dueTime !== saved.dueTime)) {
       delete saved.overdueAlerted;
     }
