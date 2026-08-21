@@ -1264,7 +1264,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
   );
 }
 
-const TASK_SIZE_BASE = { padY: 8, padX: 16, font: 15, checkSize: 28, badgeFont: 11, memoFont: 13 };
+const TASK_SIZE_BASE = { padY: 8, padX: 16, font: 15, checkSize: 22, badgeFont: 11, memoFont: 13 };
 const TASK_SIZE_MIN = 0.5;
 const TASK_SIZE_MAX = 2.0;
 const TASK_SIZE_DEFAULT = 1.0;
@@ -1407,7 +1407,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{
-          display: "flex", alignItems: "flex-start", gap: 13, padding: sz.padY + "px " + sz.padX + "px",
+          display: "flex", alignItems: "center", gap: 13, padding: sz.padY + "px " + sz.padX + "px",
           background: "var(--bg-main)", borderRadius: 0,
           borderLeft: "3px solid " + (barColor || "transparent"),
           borderBottom: "1px solid var(--row-border)",
@@ -1423,7 +1423,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
           cursor: "pointer", backgroundColor: task.done ? "var(--accent)" : "transparent",
           color: "var(--accent-text)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          marginTop: 2, position: "relative", zIndex: 1,
+          position: "relative", zIndex: 1,
         }}>
           {task.done && <CheckIcon />}
         </button>
