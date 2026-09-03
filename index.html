@@ -16,6 +16,9 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     .chk-btn:hover .chk-box { border-color: var(--accent) !important; }
     .chk-btn:hover .chk-preview { opacity: 0.45 !important; }
+    @media (hover: hover) {
+      .task-row:hover { background-color: var(--bg-badge) !important; }
+    }
     body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
   </style>
@@ -1408,6 +1411,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
         fontSize: 13, fontWeight: 700,
       }}>削除</div>
       <div
+        className="task-row"
         onClick={handleCardClick}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
