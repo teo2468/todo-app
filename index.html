@@ -18,6 +18,7 @@
     .chk-btn:hover .chk-preview { opacity: 0.45 !important; }
     @media (hover: hover) {
       .task-row:hover { background-color: var(--bg-badge) !important; }
+      .tab-btn:hover { background-color: var(--bg-badge) !important; border-radius: 8px 8px 0 0; }
     }
     body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
@@ -2413,6 +2414,7 @@ function TodoApp() {
                     transition: "opacity 0.15s, border 0.1s",
                   }}>
                   <button
+                    className="tab-btn"
                     onClick={() => setActiveTabId(tab.id)}
                     style={{
                       padding: "10px 13px", border: "none", cursor: "pointer",
@@ -2436,7 +2438,7 @@ function TodoApp() {
               );
             })}
 
-            <button onClick={() => setActiveTabId(ALL_TAB)} style={{
+            <button className="tab-btn" onClick={() => setActiveTabId(ALL_TAB)} style={{
               padding: "10px 13px", border: "none", cursor: "pointer", fontSize: 13,
               fontWeight: isAllView ? 700 : 500, whiteSpace: "nowrap",
               color: isAllView ? "var(--text-primary)" : "var(--text-secondary)",
@@ -2459,7 +2461,7 @@ function TodoApp() {
                 .filter(d => d >= 0)
                 .sort((a, b) => a - b)[0];
               return (
-                <button onClick={() => setActiveTabId(COUNTDOWN_TAB)} style={{
+                <button className="tab-btn" onClick={() => setActiveTabId(COUNTDOWN_TAB)} style={{
                   padding: "10px 13px", border: "none", cursor: "pointer",
                   fontSize: 13,
                   fontWeight: isCdActive ? 700 : 500, whiteSpace: "nowrap",
@@ -2479,7 +2481,7 @@ function TodoApp() {
               );
             })()}
 
-            <button onClick={() => setShowAddTab(true)} style={{
+            <button className="tab-btn" onClick={() => setShowAddTab(true)} style={{
               width: 28, height: 28, minWidth: 28, borderRadius: 8,
               border: "2px dashed var(--border)", cursor: "pointer",
               backgroundColor: "transparent", color: "var(--text-tertiary)",
