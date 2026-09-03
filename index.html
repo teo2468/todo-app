@@ -14,6 +14,8 @@
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    .chk-btn:hover .chk-box { border-color: var(--accent) !important; }
+    .chk-btn:hover .chk-preview { opacity: 0.45 !important; }
     body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
   </style>
@@ -1167,12 +1169,14 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
               border: "1px solid var(--border)", borderLeftWidth: 3, borderLeftColor: color,
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}>
-                  {cd.name}
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                    {cd.name}
+                  </span>
                   {hasReminder && <span style={{ fontSize: 12, opacity: 0.7 }}>🔔</span>}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
-                  {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
+                  <span style={{ fontSize: 12, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+                    {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
+                  </span>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1417,15 +1421,24 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
           cursor: "pointer",
           userSelect: "none", WebkitUserSelect: "none", touchAction: "pan-y",
         }}>
-        <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }} style={{
-          width: sz.checkSize, height: sz.checkSize, minWidth: sz.checkSize, borderRadius: 6,
-          border: task.done ? "1.5px solid var(--accent)" : "1.5px solid var(--check-border)",
-          cursor: "pointer", backgroundColor: task.done ? "var(--accent)" : "transparent",
+        <button className="chk-btn" onClick={(e) => { e.stopPropagation(); onToggle(task.id); }} style={{
+          width: 38, height: 38, minWidth: 38, margin: -8,
+          border: "none", backgroundColor: "transparent", cursor: "pointer", padding: 0,
           color: "var(--accent-text)",
           display: "flex", alignItems: "center", justifyContent: "center",
           position: "relative", zIndex: 1,
         }}>
-          {task.done && <CheckIcon />}
+          <div className="chk-box" style={{
+            width: sz.checkSize, height: sz.checkSize, borderRadius: 6,
+            border: task.done ? "1.5px solid var(--accent)" : "1.5px solid var(--check-border)",
+            backgroundColor: task.done ? "var(--accent)" : "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "border-color 0.15s",
+          }}>
+            {task.done
+              ? <CheckIcon />
+              : <span className="chk-preview" style={{ display: "flex", opacity: 0, transition: "opacity 0.15s", color: "var(--text-tertiary)" }}><CheckIcon /></span>}
+          </div>
         </button>
 
         <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
@@ -1440,6 +1453,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
             <p style={{ margin: "3px 0 0", fontSize: sz.memoFont, color: "var(--text-secondary)", lineHeight: 1.4 }}>{task.memo}</p>
           )}
 
+          {!!(task.dueDate || task.dueTime || (!isRepeat && priObj && priObj.key !== "none") || rl || (showTabName && task._tabName) || (!task.done && progress > 0) || task.notify) && (
           <div style={{ display: "flex", alignItems: "center", gap: 11, flexWrap: "wrap", marginTop: 4, minHeight: Math.round(sz.badgeFont * 1.5) }}>
             {task.dueDate && (
               <span style={{
@@ -1474,6 +1488,7 @@ function TaskItem({ task, tabStyle, onToggle, onDelete, onEdit, showTabName, onR
               <span style={{ fontSize: sz.badgeFont, fontWeight: 500, color: "var(--text-tertiary)" }}>🔔</span>
             )}
           </div>
+          )}
 
           {!task.done && progress > 0 && (
             <div style={{ height: 3, borderRadius: 2, backgroundColor: "var(--bg-badge)", marginTop: 8, overflow: "hidden", maxWidth: 240 }}>
