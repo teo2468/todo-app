@@ -1174,7 +1174,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
                     {cd.name}
                   </span>
                   {hasReminder && <span style={{ fontSize: 13, opacity: 0.7 }}>🔔</span>}
-                  <span style={{ fontSize: 17, color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: 17, color: "var(--text-tertiary)", whiteSpace: "nowrap", marginLeft: 36, position: "relative", top: 8 }}>
                     {new Date(cd.date).toLocaleDateString("ja-JP", { year: "numeric", month: "short", day: "numeric", weekday: "short" })}
                   </span>
                 </div>
