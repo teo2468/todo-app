@@ -20,6 +20,7 @@
       .task-row:hover { background-color: var(--bg-badge) !important; }
       .tab-btn:hover { background-color: var(--bg-badge) !important; border-radius: 8px 8px 0 0; }
       .icon-btn:hover { background-color: var(--bg-badge) !important; }
+      .sort-btn:hover { background-color: var(--bg-checkbox) !important; }
     }
     body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
@@ -2529,8 +2530,8 @@ function TodoApp() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "0 4px", flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 4 }}>
                 <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 600 }}>並べ替え</span>
-                <button onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")} style={{
-                  background: "none", border: "none", cursor: "pointer", padding: 2,
+                <button className="sort-btn" onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")} style={{
+                  background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 6,
                   color: "var(--text-tertiary)", display: "flex", alignItems: "center",
                 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -2542,7 +2543,7 @@ function TodoApp() {
                 </button>
               </div>
               {SORT_OPTIONS.map(s => (
-                <button key={s.key} onClick={() => {
+                <button key={s.key} className={sortKey === s.key ? undefined : "sort-btn"} onClick={() => {
                   setSortKey(s.key);
                   setSortDir(SORT_DEFAULTS[s.key]);
                 }} style={{
@@ -2553,7 +2554,7 @@ function TodoApp() {
                 }}>{s.label}</button>
               ))}
               {!isAllView && activeTab && (
-                <button onClick={() => startEditTab(activeTab)} style={{
+                <button className="sort-btn" onClick={() => startEditTab(activeTab)} style={{
                   marginLeft: "auto", padding: "4px 10px", borderRadius: 8,
                   border: "1px solid var(--border)", cursor: "pointer",
                   fontSize: 13, fontWeight: 600, fontFamily: "inherit",
