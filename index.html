@@ -19,6 +19,7 @@
     @media (hover: hover) {
       .task-row:hover { background-color: var(--bg-badge) !important; }
       .tab-btn:hover { background-color: var(--bg-badge) !important; border-radius: 8px 8px 0 0; }
+      .icon-btn:hover { background-color: var(--bg-badge) !important; }
     }
     body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
@@ -2348,6 +2349,7 @@ function TodoApp() {
           <div style={{ display: "flex", gap: 6 }}>
             {USER_ID && (
               <button
+                className="icon-btn"
                 onClick={async () => {
                   setSyncing(true);
                   await forcePull();
@@ -2366,16 +2368,16 @@ function TodoApp() {
                 <RefreshIcon spinning={syncing} />
               </button>
             )}
-            <button onClick={() => { setShowSearch(true); setSearchQuery(""); }} title="検索" style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button className="icon-btn" onClick={() => { setShowSearch(true); setSearchQuery(""); }} title="検索" style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <SearchIcon />
             </button>
-            <button onClick={() => setShowCalc(true)} title="日数計算" style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button className="icon-btn" onClick={() => setShowCalc(true)} title="日数計算" style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <CalcIcon />
             </button>
-            <button onClick={() => setDarkMode(!darkMode)} style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button className="icon-btn" onClick={() => setDarkMode(!darkMode)} style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
-            <button onClick={() => setShowSettings(true)} style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button className="icon-btn" onClick={() => setShowSettings(true)} style={{ width: 38, height: 38, borderRadius: 19, border: "none", cursor: "pointer", backgroundColor: "transparent", color: "var(--text-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <GearIcon />
             </button>
           </div>
