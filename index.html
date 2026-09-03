@@ -21,6 +21,8 @@
       .tab-btn:hover { background-color: var(--bg-badge) !important; border-radius: 8px 8px 0 0; }
       .icon-btn:hover { background-color: var(--bg-badge) !important; }
       .sort-btn:hover { background-color: var(--bg-checkbox) !important; }
+      .hov:hover { background-color: var(--bg-checkbox) !important; }
+      .hov-dim:hover { filter: brightness(0.94); }
     }
     body { background: #FFFFFF; font-family: 'Noto Sans JP', sans-serif; }
     #root { min-height: 100vh; }
@@ -797,7 +799,7 @@ function Modal({ isOpen, onClose, title, children, footer }) {
       }}>
         <div style={{ padding: "24px 24px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{title}</h3>
-          <button onClick={onClose} style={{
+          <button className="hov" onClick={onClose} style={{
             width: 36, height: 36, borderRadius: 8, border: "none", cursor: "pointer",
             backgroundColor: "var(--bg-badge)", color: "var(--text-tertiary)",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
@@ -985,7 +987,7 @@ function DateCalculator() {
   }
 
   const modeBtn = (key, label) => (
-    <button onClick={() => setMode(key)} style={{
+    <button className={mode === key ? undefined : "hov"} onClick={() => setMode(key)} style={{
       flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
       backgroundColor: mode === key ? ACCENT : "var(--bg-badge)",
       color: mode === key ? "var(--accent-text)" : "var(--text-secondary)",
@@ -1011,8 +1013,8 @@ function DateCalculator() {
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>終了日</div>
-                <button onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
-                  background: "none", border: "none", cursor: "pointer", padding: "2px 4px",
+                <button className="hov" onClick={() => { const tmp = calcStart; setCalcStart(calcEnd); setCalcEnd(tmp); }} style={{
+                  background: "none", border: "none", cursor: "pointer", padding: "3px 6px", borderRadius: 6,
                   color: "var(--text-tertiary)", fontSize: 13, lineHeight: 1,
                 }} title="入れ替え">⇔</button>
               </div>
@@ -1061,7 +1063,7 @@ function DateCalculator() {
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)" }}>日</span>
             <div style={{ display: "flex", gap: 4, flex: 1 }}>
               {[["after", "後"], ["before", "前"]].map(([key, label]) => (
-                <button key={key} onClick={() => setOffsetDir(key)} style={{
+                <button key={key} className={offsetDir === key ? undefined : "hov"} onClick={() => setOffsetDir(key)} style={{
                   flex: 1, padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
                   backgroundColor: offsetDir === key ? ACCENT : "var(--bg-badge)",
                   color: offsetDir === key ? "var(--accent-text)" : "var(--text-secondary)",
@@ -1072,7 +1074,7 @@ function DateCalculator() {
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
             {[7, 14, 30, 60, 90, 100].map(n => (
-              <button key={n} onClick={() => setOffsetDays(String(n))} style={{
+              <button key={n} className={offsetDays === String(n) ? undefined : "hov"} onClick={() => setOffsetDays(String(n))} style={{
                 padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
                 backgroundColor: offsetDays === String(n) ? ACCENT : "var(--bg-card)",
                 color: offsetDays === String(n) ? "var(--accent-text)" : "var(--text-secondary)",
@@ -1190,14 +1192,15 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
                   <span style={{ fontSize: 22, fontWeight: 900, color, whiteSpace: "nowrap" }}>{label}</span>
                 </div>
                 <button
+                  className="hov"
                   onClick={() => openEdit(cd)}
                   title="編集"
                   style={{
-                    background: "none", border: "none", cursor: "pointer", padding: 4,
+                    background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 6,
                     color: "var(--text-tertiary)", opacity: 0.7, lineHeight: 1,
                   }}
                 ><EditIcon /></button>
-                <button onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
+                <button className="hov" onClick={() => onDelete(cd.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 6, color: "var(--text-tertiary)", opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
               </div>
             </div>
           );
@@ -1210,7 +1213,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
             style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)", backgroundColor: "var(--bg-input)", color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", outline: "none" }} />
           <DateInput value={date} onChange={setDate} style={{ borderRadius: 10 }} />
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleAdd} disabled={!name.trim() || !date} style={{
+            <button className="hov-dim" onClick={handleAdd} disabled={!name.trim() || !date} style={{
               flex: 1, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
               backgroundColor: (name.trim() && date) ? ACCENT : "var(--bg-badge)",
               color: (name.trim() && date) ? "var(--accent-text)" : "var(--text-tertiary)",
@@ -1224,7 +1227,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} style={{
+        <button className="hov" onClick={() => setAdding(true)} style={{
           marginTop: 8, padding: "10px 14px", borderRadius: 12,
           border: "2px dashed var(--border)", cursor: "pointer",
           backgroundColor: "transparent", color: "var(--text-tertiary)",
@@ -1240,7 +1243,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
           <div style={{ width: "min(90vw, 420px)", backgroundColor: "var(--bg-card)", borderRadius: 20, padding: "24px 24px 28px", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>目標を編集</h3>
-              <button onClick={() => setEditingCd(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-tertiary)", lineHeight: 1 }}>✕</button>
+              <button className="hov" onClick={() => setEditingCd(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 6, fontSize: 20, color: "var(--text-tertiary)", lineHeight: 1 }}>✕</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <input
@@ -1256,7 +1259,7 @@ function CountdownPanel({ countdowns, onAdd, onDelete, onUpdate }) {
                 onChange={r => setEditingCd({ ...editingCd, reminder: r })}
               />
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button onClick={saveEdit} disabled={!editingCd.name.trim() || !editingCd.date} style={{
+                <button className="hov-dim" onClick={saveEdit} disabled={!editingCd.name.trim() || !editingCd.date} style={{
                   flex: 1, padding: "12px", borderRadius: 12, border: "none", cursor: "pointer",
                   backgroundColor: (editingCd.name.trim() && editingCd.date) ? ACCENT : "var(--bg-badge)",
                   color: (editingCd.name.trim() && editingCd.date) ? "var(--accent-text)" : "var(--text-tertiary)",
@@ -1519,7 +1522,7 @@ function WeekdayChips({ days, onChange }) {
       {WEEKDAYS_JP.map((d, i) => {
         const sel = days.includes(i);
         return (
-          <button key={i} onClick={() => {
+          <button key={i} className={sel ? undefined : "hov"} onClick={() => {
             if (sel) {
               if (days.length === 1) return;
               onChange(days.filter(x => x !== i));
@@ -1559,7 +1562,7 @@ function RepeatDetail({ task, setTask }) {
         {WEEKDAYS_JP.map((d, i) => {
           const sel = (task.repeatDays || []).includes(i);
           return (
-            <button key={i} onClick={() => toggleDay(i)} style={{
+            <button key={i} className={(task.repeatDays || []).includes(i) ? undefined : "hov"} onClick={() => toggleDay(i)} style={{
               width: 38, height: 38, borderRadius: 10,
               border: sel ? "none" : "1px solid var(--border)",
               cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit",
@@ -1575,8 +1578,8 @@ function RepeatDetail({ task, setTask }) {
   const MonthPicker = () => (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => setTask({ ...task, monthMode: "date" })} style={btnStyle(task.monthMode !== "weekday")}>日付</button>
-        <button onClick={() => setTask({ ...task, monthMode: "weekday", monthOrdinal: task.monthOrdinal || 1, monthWeekday: task.monthWeekday != null ? task.monthWeekday : 1 })} style={btnStyle(task.monthMode === "weekday")}>曜日</button>
+        <button className={task.monthMode !== "weekday" ? undefined : "hov"} onClick={() => setTask({ ...task, monthMode: "date" })} style={btnStyle(task.monthMode !== "weekday")}>日付</button>
+        <button className={task.monthMode === "weekday" ? undefined : "hov"} onClick={() => setTask({ ...task, monthMode: "weekday", monthOrdinal: task.monthOrdinal || 1, monthWeekday: task.monthWeekday != null ? task.monthWeekday : 1 })} style={btnStyle(task.monthMode === "weekday")}>曜日</button>
       </div>
       {task.monthMode !== "weekday" ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1615,7 +1618,7 @@ function RepeatDetail({ task, setTask }) {
         />
         <div style={{ display: "flex", gap: 4 }}>
           {CUSTOM_UNITS.map(u => (
-            <button key={u.key} onClick={() => setTask({ ...task, customUnit: u.key })} style={btnStyle((task.customUnit || "day") === u.key)}>{u.label}</button>
+            <button key={u.key} className={(task.customUnit || "day") === u.key ? undefined : "hov"} onClick={() => setTask({ ...task, customUnit: u.key })} style={btnStyle((task.customUnit || "day") === u.key)}>{u.label}</button>
           ))}
         </div>
         <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>ごと</span>
@@ -1696,20 +1699,25 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          {!isRepeat && [{ label: "今日", d: 0 }, { label: "明日", d: 1 }, { label: "来週", d: 7 }].map(p => (
-            <button key={p.label} onClick={() => {
-              const t = new Date();
-              t.setDate(t.getDate() + p.d);
-              setTask({ ...task, dueDate: tsToDateStr(t.getTime()) });
-            }} style={{
-              padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
-              backgroundColor: "var(--bg-card)", color: "var(--text-secondary)",
-              fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-            }}>{p.label}</button>
-          ))}
+          {!isRepeat && [{ label: "今日", d: 0 }, { label: "明日", d: 1 }, { label: "来週", d: 7 }].map(p => {
+            const t = new Date();
+            t.setDate(t.getDate() + p.d);
+            const chipDate = tsToDateStr(t.getTime());
+            const sel = task.dueDate === chipDate;
+            return (
+              <button key={p.label} className={sel ? undefined : "hov"} onClick={() => setTask({ ...task, dueDate: chipDate })} style={{
+                padding: "5px 10px", borderRadius: 8, cursor: "pointer",
+                border: sel ? "1px solid var(--accent)" : "1px solid var(--border)",
+                backgroundColor: sel ? ACCENT : "var(--bg-card)",
+                color: sel ? "var(--accent-text)" : "var(--text-secondary)",
+                fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+              }}>{p.label}</button>
+            );
+          })}
           {["09:00", "12:00", "18:00", "21:00"].map(tm => (
-            <button key={tm} onClick={() => setTask({ ...task, dueTime: tm })} style={{
-              padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer",
+            <button key={tm} className={task.dueTime === tm ? undefined : "hov"} onClick={() => setTask({ ...task, dueTime: tm })} style={{
+              padding: "5px 10px", borderRadius: 8, cursor: "pointer",
+              border: task.dueTime === tm ? "1px solid var(--accent)" : "1px solid var(--border)",
               backgroundColor: task.dueTime === tm ? ACCENT : "var(--bg-card)",
               color: task.dueTime === tm ? "var(--accent-text)" : "var(--text-secondary)",
               fontSize: 12, fontWeight: 600, fontFamily: "inherit",
@@ -1737,7 +1745,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
                 const timings = getTaskTimings(task);
                 const sel = timings.includes(n.key);
                 return (
-                  <button key={n.key} onClick={() => {
+                  <button key={n.key} className={sel ? undefined : "hov"} onClick={() => {
                     let next;
                     if (sel) {
                       if (timings.length === 1) return; // 最低1つは残す
@@ -1806,7 +1814,7 @@ function TaskForm({ task, setTask, onSubmit, submitLabel }) {
           <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 8 }}>優先度</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {PRIORITIES.map(p => (
-              <button key={p.key} onClick={() => setTask({ ...task, priority: p.key })} style={{
+              <button key={p.key} className={task.priority === p.key ? undefined : "hov"} onClick={() => setTask({ ...task, priority: p.key })} style={{
                 padding: "7px 14px", borderRadius: 10, border: "none", cursor: "pointer",
                 fontSize: 13, fontWeight: 600, fontFamily: "inherit",
                 backgroundColor: task.priority === p.key ? p.color : "var(--bg-badge)",
@@ -2680,7 +2688,7 @@ function TodoApp() {
                 }} />
               連続で追加（追加後もこの画面を開いたまま）
             </label>
-            <button onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
+            <button className="hov-dim" onClick={handleAddTask} disabled={!newTask.text.trim()} style={{
               width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
               backgroundColor: newTask.text.trim() ? ACCENT : "var(--bg-badge)",
               color: newTask.text.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
@@ -2695,7 +2703,7 @@ function TodoApp() {
               {tabs.map(t => {
                 const sel = t.id === addToTabId;
                 return (
-                  <button key={t.id} onClick={() => setAddToTabId(t.id)} style={{
+                  <button key={t.id} className={t.id === addToTabId ? undefined : "hov"} onClick={() => setAddToTabId(t.id)} style={{
                     padding: "6px 12px", borderRadius: 10, border: "none", cursor: "pointer",
                     fontSize: 13, fontWeight: 600, fontFamily: "inherit",
                     backgroundColor: sel ? (t.color || "#64748B") : "var(--bg-badge)",
@@ -2717,7 +2725,7 @@ function TodoApp() {
 
       <Modal isOpen={editingTask !== null} onClose={() => setEditingTask(null)} title="タスクを編集"
         footer={editingTask ? (
-          <button onClick={updateTask} disabled={!editingTask.text.trim()} style={{
+          <button className="hov-dim" onClick={updateTask} disabled={!editingTask.text.trim()} style={{
             width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
             backgroundColor: editingTask.text.trim() ? ACCENT : "var(--bg-badge)",
             color: editingTask.text.trim() ? "var(--accent-text)" : "var(--text-tertiary)",
@@ -2830,7 +2838,7 @@ function TodoApp() {
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={() => setDelTabId(null)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "1px solid var(--border)", cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: "inherit" }}>キャンセル</button>
-          <button onClick={() => deleteTab(delTabId)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
+          <button className="hov-dim" onClick={() => deleteTab(delTabId)} style={{ flex: 1, padding: "14px", borderRadius: 14, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
         </div>
       </Modal>
 
@@ -2994,6 +3002,7 @@ function TodoApp() {
               </div>
 
               <button
+                className="hov-dim"
                 onClick={handleSaveNotifySettings}
                 style={{
                   width: "100%", padding: "10px", borderRadius: 10, border: "none", cursor: "pointer",
@@ -3060,7 +3069,7 @@ function TodoApp() {
                   {MIN_PRIORITY_OPTIONS.map(p => {
                     const sel = minPri === p.key;
                     return (
-                      <button key={p.key} onClick={() => updateMinPri(p.key)} style={{
+                      <button key={p.key} className={sel ? undefined : "hov"} onClick={() => updateMinPri(p.key)} style={{
                         padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
                         backgroundColor: sel ? ACCENT : "var(--bg-badge)",
                         color: sel ? "var(--accent-text)" : "var(--text-secondary)",
@@ -3145,7 +3154,7 @@ function TodoApp() {
                       const cur = typeof (appData.settings || {}).overdueGraceMin === "number" ? appData.settings.overdueGraceMin : 30;
                       const sel = cur === o.v;
                       return (
-                        <button key={o.v} onClick={() => {
+                        <button key={o.v} className={sel ? undefined : "hov"} onClick={() => {
                           const newData = { ...appData, settings: { ...(appData.settings || {}), overdueGraceMin: o.v } };
                           updateData(newData);
                           syncNow(newData);
@@ -3180,7 +3189,7 @@ function TodoApp() {
                   <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>完了済みを自動削除</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {[{ v: 0, label: "オフ" }, { v: 3, label: "3日後" }, { v: 7, label: "7日後" }, { v: 30, label: "30日後" }].map(o => (
-                      <button key={o.v} onClick={() => setDays(o.v)} style={{
+                      <button key={o.v} className={cur === o.v ? undefined : "hov"} onClick={() => setDays(o.v)} style={{
                         flex: 1, padding: "8px", borderRadius: 10, border: "none", cursor: "pointer",
                         backgroundColor: cur === o.v ? "var(--accent)" : "var(--bg-card)",
                         color: cur === o.v ? "var(--accent-text)" : "var(--text-secondary)",
@@ -3195,13 +3204,13 @@ function TodoApp() {
                 </div>
               );
             })()}
-            <button onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done || (x.repeat && x.repeat !== "none")) }))); setShowSettings(false); }} style={{
+            <button className="hov" onClick={() => { setTabs(tabs.map(t => ({ ...t, tasks: t.tasks.filter(x => !x.done || (x.repeat && x.repeat !== "none")) }))); setShowSettings(false); }} style={{
               width: "100%", padding: "14px 16px", borderRadius: 12, border: "none", cursor: "pointer",
               backgroundColor: "var(--bg-badge)", color: "var(--text-primary)",
               fontSize: 14, fontWeight: 600, fontFamily: "inherit", textAlign: "left",
             }}>完了済みタスクをすべて削除</button>
 
-            <button onClick={() => {
+            <button className="hov" onClick={() => {
               const newCds = [];
               const newData = { ...appData, countdowns: newCds };
               updateData(newData);
@@ -3213,7 +3222,7 @@ function TodoApp() {
             }}>カウントダウンをすべて削除</button>
 
             <div style={{ marginTop: 8 }}>
-              <button onClick={resetData} style={{
+              <button className="hov-dim" onClick={resetData} style={{
                 width: "100%", padding: "14px", borderRadius: 12, border: "none", cursor: "pointer",
                 backgroundColor: "var(--danger-bg)", color: "var(--danger)",
                 fontSize: 14, fontWeight: 700, fontFamily: "inherit",
@@ -3230,7 +3239,7 @@ function TodoApp() {
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={() => setConfirmClearDone(false)} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer", backgroundColor: "var(--bg-card)", color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: "inherit" }}>キャンセル</button>
-          <button onClick={() => { clearDone(); setConfirmClearDone(false); }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
+          <button className="hov-dim" onClick={() => { clearDone(); setConfirmClearDone(false); }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "none", cursor: "pointer", backgroundColor: "#EF4444", color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit" }}>削除する</button>
         </div>
       </Modal>
 
